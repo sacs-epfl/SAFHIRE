@@ -134,13 +134,13 @@ function Ω_to_Ω_star(P::Poly)
     P_star=[M*P[1:N]; zeros(M-N)]
     ######
     ΣP=zeros(M_over_t)
-    @floop for i in 1:M_over_t
+    for i in 1:M_over_t
         for k in 0:t-2
             ΣP[i]+=P[i+k*M_over_t]
         end
         ΣP[i]*=M_over_t
     end
-    @floop  for i ∈ 1:N
+    for i ∈ 1:N
         P_star[i]-=ΣP[Mod_Table[i]]
     end
     return P_star
@@ -163,12 +163,12 @@ function Ω_star_to_Ω(P_star::Poly_star)
     #
     P=zeros(M)
     ΣP_star=zeros(M_over_t)
-    @floop for i in 1:M_over_t
+    for i in 1:M_over_t
         for k in 0:t-2
             ΣP_star[i]+=P_star[i+k*M_over_t]
         end
     end
-    @floop  for i ∈ 1:N
+    for i ∈ 1:N
         P[i]=P_star[i]+ΣP_star[Mod_Table[i]]
     end
     return F*P
@@ -180,12 +180,12 @@ function Ω_star_to_Ω_int(P_star::Poly_star)
     #
     P=zeros(M)
     ΣP_star=zeros(M_over_t)
-    @floop for i in 1:M_over_t
+    for i in 1:M_over_t
         for k in 0:t-2
             ΣP_star[i]+=P_star[i+k*M_over_t]
         end
     end
-    @floop  for i ∈ 1:N
+    for i ∈ 1:N
         P[i]=P_star[i]+ΣP_star[Mod_Table[i]]
     end
     return M_inv*P

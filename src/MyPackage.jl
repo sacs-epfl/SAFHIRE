@@ -1,6 +1,10 @@
 module MyPackage
+
+    # External dependencies used widely
+    using FFTW
+
     include("Constants.jl")
-    incluide("Types.jl")
+    include("Types.jl")
     include("utils/BaseFunctions.jl")
     include("utils/Operations.jl")
     include("utils/Encryption.jl")
