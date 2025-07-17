@@ -3,6 +3,12 @@
 ####################################################
 #
 #
+"""
+    encrypt_poly_to_rlwe(μ::Poly,FFT_s::FFT_Key,σ::Float64)
+
+    Encrypts a polynomial μ in the standard basis to RLWE ciphertext (a,b) with key s.
+    The ciphertext is expressed in the torus T.
+"""
 function encrypt_poly_to_rlwe(μ::Poly,FFT_s::FFT_Key,σ::Float64)
     #
     # Encryption of message μ with key s : b=μ + s*(Ω0_star_inv*a_star) + Ω0_star_invinv*e_star 
@@ -24,6 +30,11 @@ function encrypt_poly_to_rlwe(μ::Poly,FFT_s::FFT_Key,σ::Float64)
     return (a,b)
 end
 
+"""
+    decrypt_rlwe_to_poly(c::RLWE,FFT_s::FFT_Key)
+
+    Decrypts a RLWE ciphertext c=(a,b) to polynomial μ in the standard basis.
+"""
 function decrypt_rlwe_to_poly(c::RLWE,FFT_s::FFT_Key)
     #
     # Decryption of ciphertext c=(a,b) 

@@ -38,6 +38,14 @@ function partial_trace_0!(a_tilded::Vector{Float64},
     return nothing
 end
 
+"""
+    partial_trace(C::RLWE, j::Int64,
+                        array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}},
+                        D::Int64,l::Int64
+                        )
+
+    Compute Homomorphically an RLWE encryption of Tr_j(μ) given an RLWE encryption of μ and the Key Switching keys from s(X^d) to s(X)
+"""
 function partial_trace(C::RLWE, j::Int64,
                         array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}},
                         D::Int64,l::Int64

@@ -5,12 +5,12 @@
                             array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}},
                             g::Int64, D::Int64, l::Int64; start_trace == 0)
 
-TBW
+    Computes the optimal fast packing of RLWE ciphertexts for a given β.
 """
 function optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, β::Int64, 
                             a::Array{Float64, 3}, b::Array{Float64, 3},
                             array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}},
-                            g::Int64, D::Int64, l::Int64; start_trace == 0)
+                            g::Int64, D::Int64, l::Int64; start_trace=0::Int64)
     if β==1
         return(zeros(M), zeros(M))
     end

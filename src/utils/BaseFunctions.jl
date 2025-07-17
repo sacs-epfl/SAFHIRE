@@ -33,6 +33,12 @@ function real_to_torus(μ::Float64)
     μ=mod(μ,1)
     return(μ-(μ>=1/2))
 end
+function project_to_discrete_torus(μ::Float64,p::Int64)
+    #
+    # Projects μ on the discrete torus Τ_p
+    # 
+    return real_to_torus(convert(Int64,rounddown(μ*p))/p)
+end
 #
 """
     function Decompose_Torus(μ::Float64,D::Int64,ℓ::Int64)
@@ -189,4 +195,44 @@ function Ω_star_to_Ω_int(P_star::Poly_star)
         P[i]=P_star[i]+ΣP_star[Mod_Table[i]]
     end
     return M_inv*P
+end
+
+function compute_automorphism_indices(g::Int64)
+    indices = []
+    π = t-1
+    aux = 2
+    while π > 1
+        while !(mod(π, aux)==0)
+            aux = nextprime(aux+1)
+        end
+        π = π ÷ aux
+        for k=1:(aux-1)
+            d = powermod(g, k*π , M)
+            push!(indices, d)
+        end
+    end
+    for j=1:(α-1)
+        for k=1:(t-1)
+            d = k*t^j + 1
+            push!(indices, d)
+        end
+    end
+    return indices
+end
+
+function get_conv_output_size(input_shape::NTuple{4, Int64}, kernel_shape::NTuple{4, Int64}, stride::Int64, padding::Int64)
+    # Calculate the output size of a convolution operation
+    H, W, C_in, B = input_shape
+    KH, KW, C_in, C_out = kernel_shape
+
+    H_pad = H + 2 * padding
+    W_pad = W + 2 * padding
+
+    H_out = (H_pad - KH) ÷ stride + 1
+    W_out = (W_pad - KW) ÷ stride + 1
+
+    in_dim = B * H * W * C_in
+    out_dim = B * H_out * W_out * C_out
+
+    return (in_dim, out_dim)
 end
