@@ -14,43 +14,15 @@ include("../src/Client.jl")
 include("../config/resnet20_cifar_layers.jl")
 include("./utils/example_helpers.jl")
 
-
-## Perform passing through a Warmup layer
+## Define Constants
 global scaling = 4
-
 weight_space = [i/1.0 for i=-3:4]
 
 # Initialize kernel weights for all layers
-global kernel_weights = Array{Float64, 4}[]
-global projection_weights = Union{Array{Float64,4}, Nothing}[]
-global fc_weights = Array{Float64}
-for layer in resnet20_layers_cifar
-    if !(layer.tag == "avg_pool" || layer.tag == "fc")
-        # For convolutional layers, initialize kernel weights
-        push!(kernel_weights, rand(weight_space, layer.kernel_shape))
-        if layer.tag == "residual_projection"
-            W,H,C_in,C_out = layer.kernel_shape
-
-            push!(projection_weights, rand(weight_space, (1, 1, C_in, C_out)))
-        else
-            push!(projection_weights, nothing)
-        end
-    end
-    if layer.tag == "fc"
-        # For fully connected layers, initialize weights
-        input_dim = prod(layer.input_shape)
-        output_dim = prod(layer.output_shape)
-        #
-        global fc_weights = rand(weight_space, input_dim, output_dim)
-    end
-end
+kernel_weights, projection_weights, fc_weights = initialize_model_inference!(resnet20_layers_cifar, weight_space)
 
 # Pick random input data
 global nch_input_data_vec = vec(rand([i for i=-15:16], resnet20_layers_cifar[1].input_shape) / p)
-global a_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) # Buffers for residual connections
-global b_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) # Buffers for residual connections
-
-
 global clear_input_data_vec = copy(nch_input_data_vec)
 
 clear_input_data = clear_model_inference(
@@ -76,6 +48,8 @@ log = DataFrame(
     rlwe_size_up = Float64[],
     rlwe_size_down = Float64[]
 )
+global a_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) # Buffers for residual connections
+global b_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) # Buffers for residual connections
 global unshuffle = nothing
 inference_time = @elapsed begin
 for layer in resnet20_layers_cifar

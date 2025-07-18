@@ -1,3 +1,35 @@
+function initialize_model_inference!(
+    model,
+    weight_space
+)
+    kernel_weights = Array{Float64, 4}[]
+    projection_weights = Union{Array{Float64,4}, Nothing}[]
+    fc_weights = Array{Float64}
+    # Initialize kernel weights for all layers
+    for layer in model
+        if !(layer.tag == "avg_pool" || layer.tag == "fc")
+            # For convolutional layers, initialize kernel weights
+            push!(kernel_weights, rand(weight_space, layer.kernel_shape))
+            if layer.tag == "residual_projection"
+                W,H,C_in,C_out = layer.kernel_shape
+
+                push!(projection_weights, rand(weight_space, (1, 1, C_in, C_out)))
+            else
+                push!(projection_weights, nothing)
+            end
+        end
+        if layer.tag == "fc"
+            # For fully connected layers, initialize weights
+            input_dim = prod(layer.input_shape)
+            output_dim = prod(layer.output_shape)
+            #
+            fc_weights = rand(weight_space, input_dim, output_dim)
+        end
+    end
+
+    return kernel_weights, projection_weights, fc_weights
+end
+
 function clear_model_inference(
     nch_input_data_vec, 
     resnet20_layers_cifar, 
