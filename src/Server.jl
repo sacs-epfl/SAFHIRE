@@ -149,7 +149,6 @@ function pack_output!(a_rlwe_out::Array{Float64}, b_rlwe_out::Array{Float64},
 
             # Apply shuffling
             out_ind = shuffle(out_ind)
-            
             # Get CartesianIndices
             h,w,c,b = Tuple(indices_out[out_ind])
             # Perform the dot RLWE Dot product
@@ -184,7 +183,7 @@ function pack_output!(a_rlwe_out::Array{Float64}, b_rlwe_out::Array{Float64},
             # Check if index is in bound
             out_ind = (batch_id - 1) * ((t^β * N)÷M) + i
             if out_ind > output_size
-                break
+                continue
             end
 
             # Apply shuffling
@@ -220,7 +219,8 @@ function server_forward_conv_layer(
     H, W, C_in, B = input_shape
     KH, KW, C_in_k, C_out = size(kernel)
     @assert C_in == C_in_k "Input/output channels must match"
-
+    
+    t_extract = @elapsed begin
     # Initialize Input RLWEs
     a_rlwe_in_unpacked = Array{Float64}(undef, M*B, H, W, C_in)
     b_rlwe_in_unpacked = Array{Float64}(undef, M*B, H, W, C_in)
@@ -235,8 +235,10 @@ function server_forward_conv_layer(
                            a_rlwe_in,b_rlwe_in, input_shape, 
                            unshuffle, extract_level=extract_level
                         )
+    end
 
     # Save the unpacked RLWEs for residual connections
+    t_conv = @elapsed begin
     if tag == "residual_in"
         a_rlwe_residual[] = a_rlwe_in_unpacked
         b_rlwe_residual[] = b_rlwe_in_unpacked
@@ -252,8 +254,10 @@ function server_forward_conv_layer(
         a_rlwe_out_unpacked .+= a_rlwe_residual[]
         b_rlwe_out_unpacked .+= b_rlwe_residual[]
     end
+    end
 
     ### Perform Packing
+    t_pack = @elapsed begin
     BM, H_out, W_out, C_out = size(a_rlwe_out_unpacked)
 
     output_size =  BM * H_out * W_out * C_out ÷ M
@@ -273,9 +277,9 @@ function server_forward_conv_layer(
 
     # Pack
     pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_shape, shuffle, extract_level=extract_level)
-
+    end
     # Return the output RLWEs
-    return a_rlwe_out,b_rlwe_out
+    return a_rlwe_out,b_rlwe_out, t_extract, t_conv, t_pack
 end
 
 function server_forward_fc_layer(
@@ -285,6 +289,7 @@ function server_forward_fc_layer(
         unshuffle=nothing::Union{Permutation, Nothing},
         extract_level=1::Int, # 1 for fast_partial_trace_0, 2 for fast_partial_trace_1_comp_0
     )
+    t_extract = @elapsed begin
     # Implementation similar to server_forward_conv_layer but adapted for fully connected layers
     input_size, output_size = size(weights)
 
@@ -301,21 +306,23 @@ function server_forward_fc_layer(
                            a_rlwe_in,b_rlwe_in, input_size, 
                            unshuffle, extract_level=extract_level
                         )
-
+    end
+    t_conv = @elapsed begin
     # Perform matrix multiplication
     a_rlwe_out_unpacked = a_rlwe_in_unpacked * weights
     b_rlwe_out_unpacked = b_rlwe_in_unpacked * weights
-
+    end
     # Compute number of packing batches
     number_of_packing_batches = output_size ÷ ((t^β * N)÷M ) + 1
 
     # Preallocate output
+    t_pack = @elapsed begin
     a_rlwe_out = Array{Float64}(undef, M, number_of_packing_batches)
     b_rlwe_out = Array{Float64}(undef, M, number_of_packing_batches)
 
     shuffle = Permutation(output_size)
     # Pack
     pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_size, shuffle, extract_level=extract_level)
-
-    return a_rlwe_out, b_rlwe_out
+    end
+    return a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack
 end

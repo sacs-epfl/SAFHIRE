@@ -1,0 +1,213 @@
+using FFTW
+
+include("../src/Types.jl")
+include("../src/Constants.jl")
+include("../src/utils/BaseFunctions.jl")
+include("../src/utils/Operations.jl")
+include("../src/utils/Encryption.jl")
+include("../src/utils/KeySwitches.jl")
+include("../src/PartialTraces.jl")
+include("../src/Packing.jl")
+include("../src/Server.jl")
+include("../src/Client.jl")
+
+include("../config/resnet20_cifar_layers.jl")
+include("./utils/example_helpers.jl")
+
+
+## Perform passing through a Warmup layer
+global scaling = 4
+
+weight_space = [i/1.0 for i=-3:4]
+
+# Initialize kernel weights for all layers
+global kernel_weights = Array{Float64, 4}[]
+global projection_weights = Union{Array{Float64,4}, Nothing}[]
+global fc_weights = Array{Float64}
+for layer in resnet20_layers_cifar
+    if !(layer.tag == "avg_pool" || layer.tag == "fc")
+        # For convolutional layers, initialize kernel weights
+        push!(kernel_weights, rand(weight_space, layer.kernel_shape))
+        if layer.tag == "residual_projection"
+            W,H,C_in,C_out = layer.kernel_shape
+
+            push!(projection_weights, rand(weight_space, (1, 1, C_in, C_out)))
+        else
+            push!(projection_weights, nothing)
+        end
+    end
+    if layer.tag == "fc"
+        # For fully connected layers, initialize weights
+        input_dim = prod(layer.input_shape)
+        output_dim = prod(layer.output_shape)
+        #
+        global fc_weights = rand(weight_space, input_dim, output_dim)
+    end
+end
+
+# Pick random input data
+global nch_input_data_vec = vec(rand([i for i=-15:16], resnet20_layers_cifar[1].input_shape) / p)
+global a_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) # Buffers for residual connections
+global b_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) # Buffers for residual connections
+
+
+global clear_input_data_vec = copy(nch_input_data_vec)
+
+clear_input_data = clear_model_inference(
+    nch_input_data_vec, 
+    resnet20_layers_cifar, 
+    kernel_weights, 
+    projection_weights, 
+    fc_weights
+)
+println("Clear output data vector: ", round.(Int64,vec(clear_input_data)[1:10] *p))
+
+using CSV, DataFrames
+
+log = DataFrame(
+    Iteration = Int[],
+    t_encr = Float64[],
+    t_decrpt = Float64[],
+    t_relu = Float64[],
+    t_server = Float64[],
+    t_extract = Float64[],
+    t_conv = Float64[],
+    t_pack = Float64[],
+    rlwe_size_up = Float64[],
+    rlwe_size_down = Float64[]
+)
+global unshuffle = nothing
+inference_time = @elapsed begin
+for layer in resnet20_layers_cifar
+    nch_input_shape = layer.input_shape # (H, W, C_in, B)
+    stride = layer.stride
+    padding = layer.padding
+
+    if layer.tag == "fc"
+        println("Processing layer: ", layer.id, " FC ")
+    else
+        println("Processing layer: ", layer.id, " Kernel shape: ", layer.kernel_shape, " Stride: ", stride, " Padding: ", padding)
+    end
+    # Encrypt input data to RLWE
+    time_enc = @elapsed begin
+    println("Encrypting input data to RLWE")
+    a_rlwe_in, b_rlwe_in = encrypt_pows_input_vec_to_rlwe(
+        nch_input_data_vec, 
+        prod(nch_input_shape), 
+        FFT_Key_RLWE, σ_RLWE; 
+        trace_level=2
+    )
+    end
+    # Send data to server
+    RLWE_upload_size = (Base.summarysize(a_rlwe_in) + Base.summarysize(b_rlwe_in)) / (1024 * 1024)
+
+    # Get ouptut size
+    if layer.tag == "fc"
+        output_size = prod(layer.output_shape)
+    else
+        _, output_size = get_conv_output_size(nch_input_shape, layer.kernel_shape, stride, padding)
+    end
+
+    time_server = @elapsed begin
+    shuffle = RandomPermutation(output_size)
+
+    # Perform server forward layer operation
+    println("Performing server forward layer operation")
+    @time begin
+    if layer.tag == "fc"
+        # For fully connected layers
+        a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = server_forward_fc_layer(
+            a_rlwe_in, b_rlwe_in,
+            fc_weights;
+            unshuffle=unshuffle,
+            extract_level=2
+        )
+    elseif layer.tag == "avg_pool"
+        weights = ones(Float64, layer.kernel_shape)
+        # For average pooling layers
+        a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = server_forward_conv_layer(
+            a_rlwe_in, b_rlwe_in,
+            a_rlwe_residual, b_rlwe_residual,
+            nch_input_shape, weights, 
+            stride, padding;
+            unshuffle=unshuffle,
+            shuffle=shuffle,
+            extract_level=2,
+            tag=layer.tag
+        )
+    else
+        # For convolutional layers
+        a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = server_forward_conv_layer(
+            a_rlwe_in, b_rlwe_in,
+            a_rlwe_residual, b_rlwe_residual,
+            nch_input_shape,
+            kernel_weights[layer.id], 
+            stride, padding;
+            unshuffle=unshuffle,
+            shuffle=shuffle,
+            extract_level=2,
+            tag=layer.tag,
+            projection_kernel=projection_weights[layer.id]
+        )
+    end
+    end
+    end
+
+    # Store inverse of shuffle for next layer
+    global unshuffle = (shuffle)
+
+    # Receive data from server
+    println("Received output data from server")
+    RLWE_download_size = (Base.summarysize(a_rlwe_out) + Base.summarysize(b_rlwe_out)) / (1024 * 1024)
+
+    # If avg pool layer, adjust factor for scaling
+    time_dcrpt = @elapsed begin
+    global factor
+    if layer.tag == "avg_pool"
+        factor = 1.0 / prod(layer.kernel_shape)
+    else
+        factor = 1.0
+    end
+
+    # Decrypt output data
+    output_data_vec = decrypt_output(
+        a_rlwe_out, b_rlwe_out, 
+        output_size, 
+        FFT_Key_RLWE, β;
+        factor=factor
+    )
+    end
+    # Process output data (e.g., reshape, apply activation, etc.)
+    #requantize_output!(output_data_vec, scaling)
+
+    # Apply ReLU activation function
+    time_relu = @elapsed begin
+    if !(layer.tag == "avg_pool" || layer.tag == "fc")
+        # Apply ReLU activation function
+        relu!(output_data_vec) # Apply ReLU activation function
+    end
+    end
+
+    # Update nch_input_data_vec for the next layer
+    global nch_input_data_vec = output_data_vec
+    push!(log, (
+        Iteration = layer.id,
+        t_encr = time_enc,
+        t_decrpt = time_dcrpt,
+        t_relu = time_relu,
+        t_server = time_server,
+        t_extract = t_extract,
+        t_conv = t_conv,
+        t_pack = t_pack,
+        rlwe_size_up = RLWE_upload_size,
+        rlwe_size_down = RLWE_download_size
+    ))
+end
+end
+
+println("Clear output data vector: ", round.(Int64,vec(clear_input_data)[1:10] *p))
+println("Final output data vector: ", round.(Int64,p*[nch_input_data_vec[i] for i=1:10]) )
+println("Inference time: ", inference_time, " seconds")
+
+log_p = round(log2(p))
+CSV.write("./logs/ResNet20_Cifar10_M$(M)_P$(log_p).csv", log)
