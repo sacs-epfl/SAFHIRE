@@ -44,7 +44,6 @@ function clear_model_inference(
     clear_residual = Ref(zeros(Float64, resnet20_layers_cifar[1].input_shape))
     
     # Print initial input data
-    println("Initial input data: ", vec(clear_input_data)[1:10] * p)
     for layer in resnet20_layers_cifar
         nch_input_shape = layer.input_shape # (H, W, C_in, B)
         stride = layer.stride
