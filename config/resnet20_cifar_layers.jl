@@ -34,7 +34,8 @@ resnet20_layers_cifar = [
     (id=18, input_shape=(8, 8, 64, b), kernel_shape=(3, 3, 64, 64), stride=1, padding=1, tag="residual_in"),
     (id=19, input_shape=(8, 8, 64, b), kernel_shape=(3, 3, 64, 64), stride=1, padding=1, tag="residual_add"),
 
-    (id=20, input_shape=(8, 8, 64, b), kernel_shape=(1, 1, 64, 1), stride=1, padding=0, tag="avg_pool"),
+    # Average Pooling performed as a sum on W and H
+    (id=20, input_shape=(8, 8, 64, b), kernel_shape=(8, 8, 64, 64), stride=1, padding=0, tag="avg_pool"),
 
-    (id=21, input_shape=(8,8),output_shape=(10), stride=1, padding=1, tag="fc")
+    (id=21, input_shape=(64,),output_shape=(10), stride=1, padding=1, tag="fc")
 ]
