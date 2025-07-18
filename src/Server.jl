@@ -247,7 +247,13 @@ function server_forward_conv_layer(
         a_rlwe_residual[], b_rlwe_residual[] = rlwe_conv(a_rlwe_in_unpacked, b_rlwe_in_unpacked, projection_kernel, 2, 0)
     end
     # Perform convolution
-    a_rlwe_out_unpacked, b_rlwe_out_unpacked = rlwe_conv(a_rlwe_in_unpacked, b_rlwe_in_unpacked, kernel, stride, padding)
+    if tag != "avg_pool"
+        a_rlwe_out_unpacked, b_rlwe_out_unpacked = rlwe_conv(a_rlwe_in_unpacked, b_rlwe_in_unpacked, kernel, stride, padding)
+    else
+        # For average pooling, we use a depthwise convolution with kernel size equal to input size
+        a_rlwe_out_unpacked = sum(a_rlwe_in_unpacked, dims=(2,3)) # Sum over H and W dimensions
+        b_rlwe_out_unpacked = sum(b_rlwe_in_unpacked, dims=(2,3)) # Sum over H and W dimensions
+    end
 
     # Add residual connection if needed
     if tag == "residual_add"
