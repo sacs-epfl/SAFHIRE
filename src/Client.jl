@@ -87,9 +87,9 @@ function decrypt_output(a_out::Array{Float64}, b_out::Array{Float64},
             if idx > output_size
                 break
             end
-            output_data_vec[idx] = (M_inv * project_to_discrete_torus(aux[(j-1)*M÷(t^β)+1], p))
+            output_data_vec[idx] = project_to_discrete_torus((M_inv * project_to_discrete_torus(aux[(j-1)*M÷(t^β)+1], p)),p)
             if factor != 1.0
-                output_data_vec[idx] = project_to_discrete_torus(factor * project_to_discrete_torus(output_data_vec[idx],p),p)
+                output_data_vec[idx] = project_to_discrete_torus(factor * output_data_vec[idx],p)
             end
         end
     end
