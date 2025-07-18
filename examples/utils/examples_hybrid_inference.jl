@@ -74,21 +74,8 @@ function run_hybrid_inference(
                 unshuffle=unshuffle,
                 extract_level=extract_level
             )
-        elseif layer.tag == "avg_pool"
-            weights = ones(Float64, layer.kernel_shape)
-            # For average pooling layers
-            a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = server_forward_conv_layer(
-                a_rlwe_in, b_rlwe_in,
-                a_rlwe_residual, b_rlwe_residual,
-                nch_input_shape, weights, 
-                stride, padding;
-                unshuffle=unshuffle,
-                shuffle=shuffle,
-                extract_level=extract_level,
-                tag=layer.tag
-            )
         else
-            # For convolutional layers
+            # For convolutional layers and average pooling layers
             a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = server_forward_conv_layer(
                 a_rlwe_in, b_rlwe_in,
                 a_rlwe_residual, b_rlwe_residual,
@@ -116,7 +103,7 @@ function run_hybrid_inference(
         time_dcrpt = @elapsed begin
         global factor
         if layer.tag == "avg_pool"
-            factor = 1.0 / prod(layer.kernel_shape)
+            factor = 1.0 / layer.input_shape[1] / layer.input_shape[2]
         else
             factor = 1.0
         end

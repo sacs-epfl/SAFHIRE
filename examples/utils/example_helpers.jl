@@ -7,7 +7,7 @@ function initialize_model_inference!(
     fc_weights = Array{Float64}
     # Initialize kernel weights for all layers
     for layer in model
-        if !(layer.tag == "avg_pool" || layer.tag == "fc")
+        if !(layer.tag == "fc")
             # For convolutional layers, initialize kernel weights
             push!(kernel_weights, rand(weight_space, layer.kernel_shape))
             if layer.tag == "residual_projection"
@@ -56,8 +56,7 @@ function clear_model_inference(
             clear_output_data = clear_input_data * fc_weights
         elseif layer.tag == "avg_pool"
             # For average pooling layers
-            avg_pool_weights = ones(Float64, layer.kernel_shape)
-            clear_output_data = conv(clear_input_data, avg_pool_weights; stride=(stride, stride), pad=(padding, padding))
+            clear_output_data = sum(clear_input_data, dims=(1, 2)) # Sum over H and W dimensions
         else
             # For convolutional layers
             clear_output_data  = conv(clear_input_data, kernel_weights[layer.id]; stride=(stride, stride), pad=(padding, padding))
@@ -83,7 +82,7 @@ function clear_model_inference(
             clear_output_data = max.(clear_output_data, 0.0) # Apply ReLU activation function
         end
         if layer.tag == "avg_pool"
-            clear_output_data = clear_output_data ./ prod(layer.kernel_shape)
+            clear_output_data = clear_output_data ./ layer.input_shape[1] ./ layer.input_shape[2]
             clear_output_data = project_to_discrete_torus.(clear_output_data, p)
         end
 

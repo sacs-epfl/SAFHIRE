@@ -15,20 +15,22 @@ include("../config/resnet20_cifar_layers.jl")
 include("./utils/example_helpers.jl")
 include("./utils/examples_hybrid_inference.jl")
 
+## Load model configuration
+model = resnet20_layers_cifar
+
 ## Define Constants
-global scaling = 4
 weight_space = [i/1.0 for i=-3:4]
 
 # Initialize kernel weights for all layers
-kernel_weights, projection_weights, fc_weights = initialize_model_inference!(resnet20_layers_cifar, weight_space)
+kernel_weights, projection_weights, fc_weights = initialize_model_inference!(model, weight_space)
 
 # Pick random input data
-global nch_input_data_vec = vec(rand([i for i=-15:16], resnet20_layers_cifar[1].input_shape) / p)
+global nch_input_data_vec = vec(rand([i for i=-15:16], model[20].input_shape) / p)
 global clear_input_data_vec = copy(nch_input_data_vec)
 
 clear_input_data = clear_model_inference(
     nch_input_data_vec, 
-    resnet20_layers_cifar, 
+    model[20:21], 
     kernel_weights, 
     projection_weights, 
     fc_weights
@@ -39,7 +41,7 @@ using CSV, DataFrames
 
 inference_time = @elapsed begin
 log_data = run_hybrid_inference(
-    resnet20_layers_cifar, 
+    model[20:21], 
     nch_input_data_vec, 
     kernel_weights, 
     projection_weights, 
