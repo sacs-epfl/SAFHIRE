@@ -1,0 +1,62 @@
+function clear_model_inference(
+    nch_input_data_vec, 
+    resnet20_layers_cifar, 
+    kernel_weights, 
+    projection_weights, 
+    fc_weights
+)
+    clear_input_data_vec = copy(nch_input_data_vec)
+    clear_input_data = reshape(clear_input_data_vec, resnet20_layers_cifar[1].input_shape)
+
+    # Initialize residual connection
+    clear_residual = Ref(zeros(Float64, resnet20_layers_cifar[1].input_shape))
+    
+    # Print initial input data
+    println("Initial input data: ", vec(clear_input_data)[1:10] * p)
+    for layer in resnet20_layers_cifar
+        nch_input_shape = layer.input_shape # (H, W, C_in, B)
+        stride = layer.stride
+        padding = layer.padding
+
+        # Perform convolution
+        if layer.tag == "fc"
+            input_size = prod(layer.input_shape)
+            clear_input_data = reshape(clear_input_data, (1, input_size))
+            clear_output_data = clear_input_data * fc_weights
+        elseif layer.tag == "avg_pool"
+            # For average pooling layers
+            avg_pool_weights = ones(Float64, layer.kernel_shape)
+            clear_output_data = conv(clear_input_data, avg_pool_weights; stride=(stride, stride), pad=(padding, padding))
+        else
+            # For convolutional layers
+            clear_output_data  = conv(clear_input_data, kernel_weights[layer.id]; stride=(stride, stride), pad=(padding, padding))
+        
+            if layer.tag == "residual_in"
+                clear_residual[] = clear_input_data
+            elseif layer.tag == "residual_projection"
+                # Perform projection
+                clear_residual[] = conv(clear_input_data, projection_weights[layer.id]; stride = (2,2), pad = (0,0))
+            elseif layer.tag == "residual_add"
+                # Add residual connection if needed
+                clear_output_data .+= clear_residual[]
+            end
+        end
+        
+        # Project to Discrete Torus to get read of rounding encrypt_poly_star_to_rlwe_star
+        clear_output_data = project_to_discrete_torus.(clear_output_data, p)
+        # Requantize the output data
+        #requantize_output!(clear_output_data, scaling)
+
+        if !(layer.tag == "avg_pool" || layer.tag == "fc")
+            # Apply ReLU activation function
+            clear_output_data = max.(clear_output_data, 0.0) # Apply ReLU activation function
+        end
+        if layer.tag == "avg_pool"
+            clear_output_data = clear_output_data ./ prod(layer.kernel_shape)
+            clear_output_data = project_to_discrete_torus.(clear_output_data, p)
+        end
+
+        clear_input_data = clear_output_data
+    end
+    return clear_input_data
+end
