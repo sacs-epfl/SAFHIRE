@@ -82,7 +82,7 @@ function clear_model_inference(
             clear_output_data = max.(clear_output_data, 0.0) # Apply ReLU activation function
         end
         if layer.tag == "avg_pool"
-            clear_output_data = clear_output_data ./ layer.input_shape[1] ./ layer.input_shape[2]
+            #clear_output_data ./= layer.input_shape[1] * layer.input_shape[2]
             clear_output_data = project_to_discrete_torus.(clear_output_data, p)
         end
 

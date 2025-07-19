@@ -1,6 +1,6 @@
 function run_hybrid_inference(
     model, 
-    nch_input_data_vec, 
+    input_data, 
     kernel_weights, 
     projection_weights, 
     fc_weights, 
@@ -22,14 +22,13 @@ function run_hybrid_inference(
     )
     
     global unshuffle = nothing
-    global factor = 1.0
+    factor = 1.0
 
     # Initialize residual connection
     global a_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) 
     global b_rlwe_residual = Ref{Union{Nothing, Array{Float64}}}(nothing) 
 
-    # Print initial input data
-    println("Initial input data: ", vec(nch_input_data_vec)[1:10] * p)
+    global nch_input_data_vec = copy(input_data)
     for layer in model
         nch_input_shape = layer.input_shape # (H, W, C_in, B)
         stride = layer.stride
@@ -42,7 +41,6 @@ function run_hybrid_inference(
         end
         # Encrypt input data to RLWE
         time_enc = @elapsed begin
-        println("Encrypting input data to RLWE")
         a_rlwe_in, b_rlwe_in = encrypt_pows_input_vec_to_rlwe(
             nch_input_data_vec, 
             prod(nch_input_shape), 
@@ -62,9 +60,8 @@ function run_hybrid_inference(
 
         time_server = @elapsed begin
         shuffle = RandomPermutation(output_size)
-
+        #Permutation(output_size)
         # Perform server forward layer operation
-        println("Performing server forward layer operation")
         @time begin
         if layer.tag == "fc"
             # For fully connected layers
@@ -96,16 +93,15 @@ function run_hybrid_inference(
         global unshuffle = (shuffle)
 
         # Receive data from server
-        println("Received output data from server")
         RLWE_download_size = (Base.summarysize(a_rlwe_out) + Base.summarysize(b_rlwe_out)) / (1024 * 1024)
 
         # If avg pool layer, adjust factor for scaling
         time_dcrpt = @elapsed begin
-        global factor
+
         if layer.tag == "avg_pool"
-            factor = 1.0 / layer.input_shape[1] / layer.input_shape[2]
+            factor = 1#layer.input_shape[1] * layer.input_shape[2]
         else
-            factor = 1.0
+            factor = 1
         end
 
         # Decrypt output data
@@ -144,5 +140,5 @@ function run_hybrid_inference(
     end
 
     # Return the log of timings and sizes
-    return log
+    return nch_input_data_vec, log
 end

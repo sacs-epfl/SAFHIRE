@@ -34,5 +34,5 @@ resnet18_layers_tiny = [
 
     # Average Pooling and Fully Connected layer
     (id=18, input_shape=(4, 4, 512, b), kernel_shape=(4, 4, 512, 512), stride=1, padding=0, tag="avg_pool"),
-    (id=19, input_shape=(512,), output_shape=(100,), stride=1, padding=1, tag="fc")
+    (id=19, input_shape=(512,), output_shape=(200,), stride=1, padding=1, tag="fc")
 ]
