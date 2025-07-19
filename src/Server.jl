@@ -14,8 +14,13 @@ function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_un
 
     a_out = zeros(M)
     b_out = zeros(M)
-    a_rlwe_pows = Array{Float64}(undef, M, (t-1)*t^(extract_level-1))
-    b_rlwe_pows = Array{Float64}(undef, M, (t-1)*t^(extract_level-1))
+    if extract_level == 0
+        pow_size = 1
+    else
+        pow_size = (t-1)*t^(extract_level-1)
+    end
+    a_rlwe_pows = Array{Float64}(undef, M, pow_size)
+    b_rlwe_pows = Array{Float64}(undef, M, pow_size)
 
     for chunk_idx=1:num_chunks
         @views copyto!(a_rlwe_pows, a_rlwe[:,:, chunk_idx])
@@ -36,7 +41,9 @@ function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_un
             h,w,c,b = Tuple(indices[linear_ind])
 
             # Perform Partial Trace Extract
-            if extract_level==1
+            if extract_level==0
+                fast_partial_extract!(a_out, b_out, a_rlwe_pows,b_rlwe_pows,i-1)
+            elseif extract_level==1
                 fast_partial_trace_0!(a_out, b_out, a_rlwe_pows,b_rlwe_pows,i-1)
             elseif extract_level==2
                 fast_partial_trace_1_comp_0!(a_out, b_out, a_rlwe_pows,b_rlwe_pows,i-1)
@@ -60,8 +67,13 @@ function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_un
 
     a_out = zeros(M)
     b_out = zeros(M)
-    a_rlwe_pows = Array{Float64}(undef, M, (t-1)*t^(extract_level-1))
-    b_rlwe_pows = Array{Float64}(undef, M, (t-1)*t^(extract_level-1))
+    if extract_level == 0
+        pow_size = 1
+    else
+        pow_size = (t-1)*t^(extract_level-1)
+    end
+    a_rlwe_pows = Array{Float64}(undef, M, pow_size)
+    b_rlwe_pows = Array{Float64}(undef, M, pow_size)
 
     for chunk_idx=1:num_chunks
         @views copyto!(a_rlwe_pows, a_rlwe[:,:, chunk_idx])
@@ -79,7 +91,9 @@ function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_un
             linear_ind = unshuffle(linear_ind)
 
             # Perform Partial Trace Extract
-            if extract_level==1
+            if extract_level==0
+                fast_partial_extract!(a_out, b_out, a_rlwe_pows,b_rlwe_pows,i-1)
+            elseif extract_level==1
                 fast_partial_trace_0!(a_out, b_out, a_rlwe_pows,b_rlwe_pows,i-1)
             elseif extract_level==2
                 fast_partial_trace_1_comp_0!(a_out, b_out, a_rlwe_pows,b_rlwe_pows,i-1)

@@ -1,4 +1,5 @@
 using FFTW
+using CSV, DataFrames
 
 include("../src/Types.jl")
 include("../src/Constants.jl")
@@ -20,39 +21,55 @@ model = resnet20_layers_cifar
 
 ## Define Constants
 weight_space = [i/1.0 for i=-3:4]
+log_p = round(log2(p)) # Precision
 
 # Initialize kernel weights for all layers
 kernel_weights, projection_weights, fc_weights = initialize_model_inference!(model, weight_space)
 
-# Pick random input data
-global nch_input_data_vec = vec(rand([i for i=-15:16], model[20].input_shape) / p)
-global clear_input_data_vec = copy(nch_input_data_vec)
-
-clear_input_data = clear_model_inference(
-    nch_input_data_vec, 
-    model[20:21], 
-    kernel_weights, 
-    projection_weights, 
-    fc_weights
+# Initialize Logger for outputs
+global output_logger = DataFrame(
+    real_output = Array{Int64}[],
+    fhe_output = Array{Int64}[],
+    max_err = Int64[]
 )
-println("Clear output data vector: ", round.(Int64,vec(clear_input_data)[1:10] *p))
 
-using CSV, DataFrames
+for iter in 1:2
+    # Pick random input data
+    global nch_input_data_vec = vec(rand([i for i=-15:16], model[1].input_shape) / p)
 
-inference_time = @elapsed begin
-log_data = run_hybrid_inference(
-    model[20:21], 
-    nch_input_data_vec, 
-    kernel_weights, 
-    projection_weights, 
-    fc_weights,
-    2 # extract_level
-)
-end 
+    clear_output_data = clear_model_inference(
+        copy(nch_input_data_vec), 
+        model, 
+        kernel_weights, 
+        projection_weights, 
+        fc_weights
+    )
+    #println("Clear output data vector: ", round.(Int64,vec(clear_output_data)[1:10] *p))
 
-println("Clear output data vector: ", round.(Int64,vec(clear_input_data)[1:10] *p))
-println("Final output data vector: ", round.(Int64,p*[nch_input_data_vec[i] for i=1:10]) )
-println("Inference time: ", inference_time, " seconds")
+    inference_time = @elapsed begin
+    fhe_output_data, log_data = run_hybrid_inference(
+        model, 
+        copy(nch_input_data_vec), 
+        kernel_weights, 
+        projection_weights, 
+        fc_weights,
+        0 # extract_level
+    )
+    end 
 
-log_p = round(log2(p))
-CSV.write("./logs/ResNet20_Cifar10_M$(M)_P$(log_p).csv", log_data)
+    #println("Clear output data vector: ", round.(Int64,vec(clear_output_data)[1:10] *p))
+    #println("Final output data vector: ", round.(Int64,p*[fhe_output_data[i] for i=1:10]) )
+    println("Max error: ", maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p))))
+    println("Inference time: ", inference_time, " seconds")
+
+    # Push ouput to DataFrame
+    push!(output_logger, (
+        real_output = round.(Int64,vec(clear_output_data) *p),
+        fhe_output = round.(Int64,p*[fhe_output_data[i] for i=1:10]),
+        max_err = maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p)))
+    ))
+
+    CSV.write("./logs/ResNet20_Cifar10_M$(M)_P$(log_p)_run_$iter.csv", log_data)
+    
+    CSV.write("./logs/ResNet20_Cifar10_M$(M)_P$(log_p)_output.csv", output_logger)
+end

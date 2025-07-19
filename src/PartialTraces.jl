@@ -100,6 +100,20 @@ function partial_trace!(a_tilded::Vector{Float64},
     return nothing
 end
 
+function fast_partial_extract!(a_out::Vector{Float64}, b_out::Vector{Float64},
+                            a_RLWE::Array{Float64}, b_RLWE::Array{Float64},
+                            i::Int64
+                            )
+    # Fast partial trace extract for level 0
+    fill!(a_out, 0.0)
+    fill!(b_out, 0.0)
+
+    @views multiply_pol_Ω_star_i_pow_minus_j!(a_out, a_RLWE[:,1], i, 1)
+    @views multiply_pol_Ω_star_i_pow_minus_j!(b_out, b_RLWE[:,1], i, 1)
+
+    return
+end
+
 function fast_partial_trace_0!(a_out::Vector{Float64}, b_out::Vector{Float64},
                             a_RLWE::Array{Float64}, b_RLWE::Array{Float64},
                             i::Int64

@@ -71,7 +71,7 @@ function decrypt_output(a_out::Array{Float64}, b_out::Array{Float64},
                         output_size::Int64, 
                         FFT_Key_RLWE::FFT_Key, 
                         β::Int64;
-                        factor=1.0::Float64)
+                        factor=1::Int64)
 
     #Assign output vector
     output_data_vec = Vector{Float64}(undef, output_size)
@@ -87,9 +87,13 @@ function decrypt_output(a_out::Array{Float64}, b_out::Array{Float64},
             if idx > output_size
                 break
             end
+            #output_data_vec[idx] = project_to_discrete_torus((M_inv * project_to_discrete_torus(aux[(j-1)*M÷(t^β)+1], p)),p)
+            #if factor != 1
+            #    output_data_vec[idx] = rounddown(output_data_vec[idx]*p / factor) / p
+            #end
             output_data_vec[idx] = project_to_discrete_torus((M_inv * project_to_discrete_torus(aux[(j-1)*M÷(t^β)+1], p)),p)
-            if factor != 1.0
-                output_data_vec[idx] = project_to_discrete_torus(factor * output_data_vec[idx],p)
+            if factor != 1
+                output_data_vec[idx] = project_to_discrete_torus(output_data_vec[idx] / factor,p)
             end
         end
     end
