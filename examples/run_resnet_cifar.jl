@@ -69,6 +69,10 @@ for iter in 1:2
         max_err = maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p)))
     ))
 
+    if !isdir("./logs")
+        mkdir("./logs")
+    end
+
     CSV.write("./logs/ResNet20_Cifar10_M$(M)_P$(log_p)_run_$iter.csv", log_data)
     
     CSV.write("./logs/ResNet20_Cifar10_M$(M)_P$(log_p)_output.csv", output_logger)
