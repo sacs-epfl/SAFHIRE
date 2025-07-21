@@ -1,0 +1,6 @@
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
+Permutations = "2ae35dd2-176d-5d53-8349-f30d82d94d4f"
