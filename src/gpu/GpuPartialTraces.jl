@@ -137,7 +137,7 @@ function kernel_partial_trace_K2toK0!(
     if i <= N && m <= M
         acc = 0.0
         for j in 1:(t - 1)
-            for k=0(t-1)
+            for k=0:(t-1)
                 pow = j*(k*t+1)
                 idx1 = mod(-(i - 1)* pow, M)
                 idx2 = mod(-pow * (N + mod(i - 1, M_over_t)), M)
