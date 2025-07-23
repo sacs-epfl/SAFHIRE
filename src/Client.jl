@@ -101,6 +101,32 @@ function decrypt_output(a_out::Array{Float64}, b_out::Array{Float64},
     return output_data_vec
 end
 
+function decrypt_batch_output(a_out::Array{Float64}, b_out::Array{Float64}, 
+                        output_size::Int64, 
+                        FFT_Key_RLWE::FFT_Key, 
+                        β::Int64;
+                        factor=1::Int64)
+
+    output_data_vec = zeros(output_size)
+
+    nb_packing_batches = size(a_out)[3]
+    for i = 1:nb_packing_batches
+        for j=1:batch_size
+            poly = mod_Φ(decrypt_rlwe_to_poly((a_out[:,j,i], b_out[:,j,i]), FFT_Key_RLWE))
+            for pck_idx =1:(t^β * N ÷ M)
+                
+                linear_idx = (i-1)*(batch_size * (t^β * N)÷M) + (j-1) * (t^β * N ÷ M)  + pck_idx
+                if linear_idx>output_size
+                    continue
+                end
+                output_data_vec[linear_idx] = project_to_discrete_torus(M_inv *project_to_discrete_torus(poly[(pck_idx-1)*M÷(t^β)+1], p),p)
+            end
+        end
+    end
+
+    return output_data_vec
+end
+
 function requantize_output!(output_data_vec::Vector{Float64}, scaling::Int64)
     # Requantize the output data vector
     for i in 1:length(output_data_vec)

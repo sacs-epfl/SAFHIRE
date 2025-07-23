@@ -1,6 +1,7 @@
 module MyPackage
 
     # External dependencies used widely
+    using Primes
     using FFTW
 
     include("Types.jl")

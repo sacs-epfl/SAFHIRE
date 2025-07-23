@@ -1,4 +1,4 @@
-using FFTW
+using FFTW, Primes
 using CSV, DataFrames
 
 include("../src/Types.jl")
@@ -53,7 +53,7 @@ for iter in 1:2
         kernel_weights, 
         projection_weights, 
         fc_weights,
-        0 # extract_level
+        1 # extract_level
     )
     end 
 

@@ -6,7 +6,7 @@ const n=1331              # Number of components in the secret LWE-key
 const S=[-1;1]            # The subset of Z in which the components of the key are picked
 const σ_LWE=2^(-26)       # Standard deviation of the Gaussian noise in LWE-encryption
 const σ_RLWE=2^(-51)      # Standard deviation of the Gaussian noise in RLWE-encryption
-const p= 65624 #781       # Number of elements in the discrete torus T_p
+const p= 2^16 #65624 #781       # Number of elements in the discrete torus T_p
 #
 #
 ##############################
