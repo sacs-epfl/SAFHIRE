@@ -33,6 +33,15 @@ function real_to_torus(μ::Float64)
     μ=mod(μ,1)
     return(μ-(μ>=1/2))
 end
+function real_to_torus(A::Array{Float64, 2})
+    M,B = size(A)
+    A_out = Array{Float64}(undef, M, B)
+    LoopVectorization.@tturbo for m in 1:M, b in 1:B
+        μ=mod(A[m,b],1)
+        A_out[m,b] = μ-(μ>=1/2)
+    end
+    return A_out
+end
 function project_to_discrete_torus(μ::Float64,p::Int64)
     #
     # Projects μ on the discrete torus Τ_p
@@ -235,4 +244,33 @@ function get_conv_output_size(input_shape::NTuple{4, Int64}, kernel_shape::NTupl
     out_dim = B * H_out * W_out * C_out
 
     return (in_dim, out_dim)
+end
+
+# A version of fill! zeros for multithreaded performances
+function multi_threaded_fill_zeros!(A::AbstractMatrix{Float64},
+    i_block_size::Int = 4)
+    M, B = size(A)
+    Threads.@threads for i_block in 1:i_block_size:B
+        i_end = min(i_block + i_block_size - 1, B)
+        for b in i_block:i_end
+            @inbounds @simd for m=1:M
+                A[m,b] = 0.0
+            end
+        end
+    end
+    return
+end
+function simd_blocked_transpose!(B::AbstractMatrix{T}, A::AbstractMatrix{T}, blocksize::Int=64) where T
+    m, n = size(A)
+    @assert size(B) == (n, m)
+    
+    Threads.@threads for ii in 1:blocksize:m
+        for jj in 1:blocksize:n
+            i_max = min(ii + blocksize - 1, m)
+            j_max = min(jj + blocksize - 1, n)
+            LoopVectorization.@tturbo for i in ii:i_max, j in jj:j_max
+                    B[j, i] = A[i, j]
+            end
+        end
+    end
 end
