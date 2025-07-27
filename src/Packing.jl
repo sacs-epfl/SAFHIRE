@@ -80,3 +80,243 @@ function optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, β::Int
 
     return a_β, b_β
 end
+
+function transform_poly_cache_friendly!(
+    a_new::Matrix{T}, b_new::Matrix{T},
+    a_0::Matrix{T}, b_0::Matrix{T},
+    output_size::Int, new_output_size::Int, pck_size::Int
+) where {T}
+
+    tb = t^(β - 1)
+
+    Threads.@threads for pck_idx = 1:div(new_output_size, tb)
+        new_pck_idx = (pck_idx - 1) * tb
+
+        for j = 0:(t - 2)
+            idx1 = j * M ÷ t
+
+            # access linear_ind in ascending order
+            @inbounds for i = 1:tb
+                linear_ind = i + j * tb + (pck_idx - 1) * pck_size
+                if linear_ind > output_size
+                    continue
+                end
+
+                col = new_pck_idx + i
+
+                @simd for m = 1:idx1
+                    row1 = M + (m - idx1)
+                    a_new[m, col] += a_0[row1, linear_ind]
+                    b_new[m, col] += b_0[row1, linear_ind]
+                end
+
+                @simd for m = idx1 + 1:M
+                    row1 = m - idx1
+                    a_new[m, col] += a_0[row1, linear_ind]
+                    b_new[m, col] += b_0[row1, linear_ind]
+                end
+            end
+        end
+    end
+end
+
+function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, β::Int64,
+                            array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}},
+                            g::Int64, D::Int64, l::Int64; start_trace=0::Int64)
+    b_size = cpu_batch_size 
+    output_size = size(a_0, 2)
+
+    # Define temporary buffers
+    a_sum = Array{Float64}(undef, M, cpu_batch_size)
+    b_sum = Array{Float64}(undef, M, cpu_batch_size)
+    a_d = Array{Float64}(undef, M, cpu_batch_size)
+    b_d = Array{Float64}(undef, M, cpu_batch_size)
+    a_buf = Array{ComplexF64}(undef, M, cpu_batch_size)
+    b_buf = Array{ComplexF64}(undef, M, cpu_batch_size)
+    a_aux = Array{ComplexF64}(undef, M, cpu_batch_size,l)
+
+    # Apply Trace 0
+    if start_trace == 0
+        batch_number = ceil(Int, output_size / b_size)
+        for batch_idx = 1:batch_number
+            start_idx = (batch_idx-1)*b_size + 1
+            end_idx = min(output_size, batch_idx*b_size)
+            @views batch_partial_trace_0!(
+                a_0[:,start_idx:end_idx], b_0[:,start_idx:end_idx], 
+                array_FFT_ksk_s_prime_to_s, 
+                g ,D ,l,
+                a_sum,b_sum,
+                a_d,b_d
+                )
+        end
+    end
+
+    # Perform rotate add 
+    #@time "first rotate add" begin
+    pck_size = (t^β * N ÷ M)
+    nb_pck = ceil(Int, output_size / pck_size)
+    #println("Number of packing batches: ", nb_pck)
+    new_output_size = nb_pck * t^(β-1) #ceil(Int, output_size / (t-1))
+
+    a_new = Array{Float64}(undef, M, new_output_size)
+    b_new = Array{Float64}(undef, M, new_output_size)
+    multi_threaded_fill_zeros!(a_new)
+    multi_threaded_fill_zeros!(b_new)
+    #a_new = zeros(M, new_output_size)
+    #b_new = zeros(M, new_output_size)
+
+    transform_poly_cache_friendly!(a_new, b_new, a_0, b_0, output_size, new_output_size, pck_size)
+    #=for idx = 1:new_output_size
+        pck_idx = (idx-1) ÷ t^(β-1) + 1
+        i = (idx-1) % t^(β-1) + 1
+        new_pck_idx = (pck_idx-1) * t^(β-1)
+        for j=0:(t-2)
+            linear_ind = i+j*t^(β-1) + (pck_idx-1) * pck_size
+            
+            if linear_ind <= output_size
+                idx1 = j*M÷(t)
+                @inbounds @simd for m = 1:idx1
+                    row1 = M + (m - idx1)
+                    a_new[m, new_pck_idx+i] += a_0[row1, linear_ind]
+                    b_new[m, new_pck_idx+i] += b_0[row1, linear_ind]
+                end
+                @inbounds @simd for m = idx1+1:M
+                    row1 = m - idx1
+                    a_new[m, new_pck_idx+i] += a_0[row1, linear_ind]
+                    b_new[m, new_pck_idx+i] += b_0[row1, linear_ind]
+                end
+                #@views rotate_poly!(a_new[:,new_pck_idx+i], a_0[:, linear_ind], j*M÷(t)+1)
+                #@views rotate_poly!(b_new[:,new_pck_idx+i], b_0[:, linear_ind], j*M÷(t)+1)
+            end
+        end
+    end=#
+    #end
+    a_in = a_new
+    b_in = b_new
+    # Perform partial traces
+    for j=2:β
+        #@time "Partial Trace $(j)" begin
+        # Inplace Batch Partial Traces
+        output_size = size(a_in, 2)
+        if j > start_trace
+            batch_number = ceil(Int, output_size / b_size)
+            for batch_idx = 1:batch_number
+                start_idx = (batch_idx-1)*b_size + 1
+                end_idx = min(output_size, batch_idx*b_size)
+                #@time "bath _$(batch_idx)" begin
+                if end_idx-start_idx+1 == b_size
+                    @views batch_partial_trace!(
+                        a_in[:,start_idx:end_idx], b_in[:,start_idx:end_idx], 
+                        j-1 ,FFT_automorphosim_ksk, 
+                        D ,l,
+                        a_sum,b_sum,
+                        a_d,b_d,
+                        a_buf, b_buf,
+                        a_aux
+                        )
+                else
+                    last_b_size = end_idx-start_idx+1
+                    a_sum_b = Array{Float64}(undef, M, last_b_size)
+                    b_sum_b = Array{Float64}(undef, M, last_b_size)
+                    a_d_b = Array{Float64}(undef, M, last_b_size)
+                    b_d_b = Array{Float64}(undef, M, last_b_size)
+                    a_buf_b = Array{ComplexF64}(undef, M, last_b_size)
+                    b_buf_b = Array{ComplexF64}(undef, M, last_b_size)
+                    a_aux_b = Array{ComplexF64}(undef, M, last_b_size,l)
+                    @views batch_partial_trace!(
+                        a_in[:,start_idx:end_idx], b_in[:,start_idx:end_idx], 
+                        j-1 ,FFT_automorphosim_ksk, 
+                        D ,l,
+                        a_sum_b,b_sum_b,
+                        a_d_b,b_d_b,
+                        a_buf_b, b_buf_b,
+                        a_aux_b
+                        )
+                end     
+            end
+        end
+
+        # Perform Add Rotate
+        new_output_size = t^(β-j) * nb_pck
+        pck_size =  t^(β-j+1)
+        #println("New output site : ", new_output_size)
+        a_new = Array{Float64}(undef, M, new_output_size)
+        b_new = Array{Float64}(undef, M, new_output_size)
+        multi_threaded_fill_zeros!(a_new)
+        multi_threaded_fill_zeros!(b_new)
+        #a_new = zeros(M, new_output_size)
+        #b_new = zeros(M, new_output_size)
+
+        for pck_idx=1:nb_pck
+            for i_β = 0:(t-1)
+                Threads.@threads for i=1:t^(β-j)
+                    linear_ind = (pck_idx-1)*pck_size + i_β*t^(β-j) + i
+                    if linear_ind > output_size
+                        continue
+                    end
+                    new_pck_idx = (pck_idx-1) * t^(β-j)
+                    @views rotate_poly!(a_new[:,new_pck_idx+i], a_in[:, linear_ind], i_β*M÷(t^j)+1)
+                    @views rotate_poly!(b_new[:,new_pck_idx+i], b_in[:, linear_ind], i_β*M÷(t^j)+1)
+                end
+            end
+        end
+
+        a_in = real_to_torus(a_new)
+        b_in = real_to_torus(b_new)
+    end
+
+    #=last_b_size = size(a_in,2)
+    a_sum_b = Array{Float64}(undef, M, last_b_size)
+    b_sum_b = Array{Float64}(undef, M, last_b_size)
+    a_d_b = Array{Float64}(undef, M, last_b_size)
+    b_d_b = Array{Float64}(undef, M, last_b_size)
+    for ind = β:(α-1)
+        @views batch_partial_trace!(
+            a_in, b_in,
+            ind ,array_FFT_ksk_s_prime_to_s, 
+            D ,l,
+            a_sum_b,b_sum_b,
+            a_d_b,b_d_b
+            ) 
+    end =#
+    for ind = β:(α-1)
+        output_size = size(a_in, 2)
+        batch_number = ceil(Int, output_size / b_size)
+        for batch_idx = 1:batch_number
+            start_idx = (batch_idx-1)*b_size + 1
+            end_idx = min(output_size, batch_idx*b_size)
+            #@time "bath _$(batch_idx)" begin
+            if end_idx-start_idx+1 == b_size
+                @views batch_partial_trace!(
+                    a_in[:,start_idx:end_idx], b_in[:,start_idx:end_idx], 
+                    ind ,FFT_automorphosim_ksk, 
+                    D ,l,
+                    a_sum,b_sum,
+                    a_d,b_d,
+                    a_buf, b_buf,
+                    a_aux
+                    )
+            else
+                last_b_size = end_idx-start_idx+1
+                a_sum_b = Array{Float64}(undef, M, last_b_size)
+                b_sum_b = Array{Float64}(undef, M, last_b_size)
+                a_d_b = Array{Float64}(undef, M, last_b_size)
+                b_d_b = Array{Float64}(undef, M, last_b_size)
+                a_buf_b = Array{ComplexF64}(undef, M, last_b_size)
+                b_buf_b = Array{ComplexF64}(undef, M, last_b_size)
+                a_aux_b = Array{ComplexF64}(undef, M, last_b_size,l)
+                @views batch_partial_trace!(
+                    a_in[:,start_idx:end_idx], b_in[:,start_idx:end_idx], 
+                    ind ,FFT_automorphosim_ksk, 
+                    D ,l,
+                    a_sum_b,b_sum_b,
+                    a_d_b,b_d_b,
+                    a_buf_b, b_buf_b,
+                    a_aux_b
+                    )
+            end    
+        end
+    end
+
+    return a_in, b_in
+end
