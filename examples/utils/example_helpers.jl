@@ -1,3 +1,13 @@
+function get_max_layer_size(model)
+    max_input_size = 0
+    for layer in model
+        if prod(layer.input_shape) > max_input_size
+            max_input_size = prod(layer.input_shape)
+        end
+    end
+    return max_input_size
+end
+
 function initialize_model_inference!(
     model,
     weight_space
