@@ -57,6 +57,7 @@ function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_un
     end
 end
 
+
 function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_unpacked::Array{Float64}, 
                         a_rlwe::Array{Float64}, b_rlwe::Array{Float64},# (M, t-1, N_chunks)
                         input_dim::Int64,
@@ -119,8 +120,7 @@ function rlwe_conv(
     a_rlwe_in_unpacked = permutedims(a_rlwe_in_unpacked, (2,3,4,1))
     b_rlwe_in_unpacked = permutedims(b_rlwe_in_unpacked, (2,3,4,1))
 
-
-    a_rlwe_out_unpacked = conv(a_rlwe_in_unpacked, kernel; stride=(stride, stride), pad=(padding, padding))
+    @time a_rlwe_out_unpacked = conv(a_rlwe_in_unpacked, kernel; stride=(stride, stride), pad=(padding, padding))
     b_rlwe_out_unpacked = conv(b_rlwe_in_unpacked, kernel; stride=(stride, stride), pad=(padding, padding))
 
     # Permute back dims to allow for non strided slicing 
@@ -245,10 +245,16 @@ function server_forward_conv_layer(
     end
 
     # Perform Partial Trace Extract
+    if Threads.nthreads()>1
+        multi_threaded_partial_extract_trace!(a_rlwe_in_unpacked, b_rlwe_in_unpacked,
+                           a_rlwe_in,b_rlwe_in, input_shape, 
+                           unshuffle, extract_level=extract_level)
+    else
     partial_extract_trace!(a_rlwe_in_unpacked, b_rlwe_in_unpacked,
                            a_rlwe_in,b_rlwe_in, input_shape, 
                            unshuffle, extract_level=extract_level
                         )
+    end
     end
 
     # Save the unpacked RLWEs for residual connections
