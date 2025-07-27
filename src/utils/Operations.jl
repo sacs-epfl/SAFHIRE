@@ -1,6 +1,6 @@
-function rotate_poly!(a::Vector{Float64},Π::AbstractVector{Float64},ind::Int64)
+function rotate_poly!(a::AbstractVector{Float64},Π::AbstractVector{Float64},ind::Int64)
     #
-    @inbounds @simd for i = 1:M
+    @inbounds for i = 1:M
         a[i] += Π[mod(i-ind,M)+1]
     end
 end
@@ -16,6 +16,16 @@ function inplace_power(buffer::Vector{Float64}, Π::Vector{Float64},d::Int64)
     fill!(buffer, 0.0)
     @inbounds for i = 1:M
         buffer[mod((i-1)*d,M)+1] += Π[i]
+    end
+end
+
+function batch_inplace_power(buffer::AbstractArray{Float64}, Π::AbstractArray{Float64},d::Int64)
+    b_size = size(buffer, 2)
+    fill!(buffer, 0.0)
+    Threads.@threads for b in 1:b_size
+        @inbounds for i = 1:M
+            buffer[mod((i-1)*d,M)+1,b] += Π[i,b]
+        end
     end
 end
 

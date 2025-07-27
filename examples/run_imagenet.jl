@@ -33,7 +33,7 @@ global output_logger = DataFrame(
     max_err = Int64[]
 )
 
-for iter in 1:2
+for iter in 1:1
     # Pick random input data
     global nch_input_data_vec = vec(rand([i for i=-15:16], model[1].input_shape) / p)
 
@@ -54,7 +54,7 @@ for iter in 1:2
         kernel_weights, 
         projection_weights, 
         fc_weights,
-        2 # extract_level
+        0 # extract_level
     )
     end 
 
@@ -70,7 +70,7 @@ for iter in 1:2
         max_err = maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p)))
     ))
 
-    CSV.write("./logs/ResNet34_M$(M)_P$(log_p)_run_$iter.csv", log_data)
+    CSV.write("./logs/Tr_0_ResNet34_M$(M)_P$(log_p)_run_$iter.csv", log_data)
     
-    CSV.write("./logs/ResNet34_M$(M)_P$(log_p)_output.csv", output_logger)
+    CSV.write("./logs/Tr_0_ResNet34_M$(M)_P$(log_p)_output.csv", output_logger)
 end

@@ -1,5 +1,7 @@
 using FFTW, Primes
-using CSV, DataFrames
+using CSV, DataFrames, LinearAlgebra
+using Tullio, LoopVectorization
+
 
 include("../src/Types.jl")
 include("../src/Constants.jl")
@@ -16,6 +18,8 @@ include("../config/resnet20_cifar_layers.jl")
 include("./utils/example_helpers.jl")
 include("./utils/examples_hybrid_inference.jl")
 
+# Configure environment
+BLAS.set_num_threads(1)
 ## Load model configuration
 model = resnet20_layers_cifar
 
@@ -53,7 +57,7 @@ for iter in 1:2
         kernel_weights, 
         projection_weights, 
         fc_weights,
-        1 # extract_level
+        2 # extract_level
     )
     end 
 
