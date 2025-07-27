@@ -14,6 +14,16 @@ for d in indices
     end
 end
 
+const FFT_automorphosim_ksk = Array{ComplexF64}(undef, M, l, 2 ,M)
+for d in indices
+    for i=1:l
+        Threads.@threads for m=1:M
+            FFT_automorphosim_ksk[m,i,1,d] = array_FFT_ksk_s_prime_to_s[d][i][1][m]
+            FFT_automorphosim_ksk[m,i,2,d] = array_FFT_ksk_s_prime_to_s[d][i][2][m]
+        end
+    end
+end
+
 function encrypt_pows_input_vec_to_rlwe(nch_input_data_vec::Vector{Float64}, 
                                         input_size::Int64, 
                                         FFT_Key_RLWE::FFT_Key, 
