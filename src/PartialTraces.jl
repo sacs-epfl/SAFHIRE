@@ -315,6 +315,80 @@ function multi_threaded_fast_partial_trace_1_comp_0!(
     return
 end
 
+function l2_blocked_extract_0!(
+    a_out::AbstractMatrix{Float64}, a_pows_RLWE::AbstractMatrix{Float64},
+    i_block_size::Int = 8
+)
+    N_bis = min(N, size(a_out, 2))
+
+    #@inbounds Threads.@threads for i_start in 1:i_block_size:N_bis
+    Threads.@threads for i_block in 1:i_block_size:N_bis
+        i_end = min(i_block + i_block_size - 1, N_bis)
+        for i in i_block:i_end
+            pow = 1
+            col = 1
+            idx1 = mod(- (i - 1) * pow, M)
+            idx2 = mod(- pow * (N + mod(i - 1, M_over_t)), M)
+
+            # Access 1 column at a time
+            @inbounds @simd for m = 1:idx1
+                row1 = M + (m - idx1)
+                a_out[m, i] += a_pows_RLWE[row1, col]
+            end
+            @inbounds @simd for m= (idx1+1):M
+                row1 = m - idx1
+                a_out[m, i] += a_pows_RLWE[row1, col]
+            end
+            @inbounds @simd for m = 1:idx2
+                row2 = M + (m - idx2)
+                a_out[m, i] -= a_pows_RLWE[row2, col]
+            end
+            @inbounds @simd for m= (idx2+1):M
+                row2 = m - idx2
+                a_out[m, i] -= a_pows_RLWE[row2, col]
+            end
+        end
+    end   
+end
+
+function l2_blocked_trace_0!(
+    a_out::AbstractMatrix{Float64}, a_pows_RLWE::AbstractMatrix{Float64},
+    i_block_size::Int = 8
+)
+    N_bis = min(N, size(a_out, 2))
+
+    #@inbounds Threads.@threads for i_start in 1:i_block_size:N_bis
+    Threads.@threads for i_block in 1:i_block_size:N_bis
+        i_end = min(i_block + i_block_size - 1, N_bis)
+        for i in i_block:i_end
+            for j = 1:(t-1)
+                pow = j
+                col = j
+                idx1 = mod(- (i - 1) * pow, M)
+                idx2 = mod(- pow * (N + mod(i - 1, M_over_t)), M)
+
+                # Access 1 column at a time
+                @inbounds @simd for m = 1:idx1
+                    row1 = M + (m - idx1)
+                    a_out[m, i] += a_pows_RLWE[row1, col]
+                end
+                @inbounds @simd for m= (idx1+1):M
+                    row1 = m - idx1
+                    a_out[m, i] += a_pows_RLWE[row1, col]
+                end
+                @inbounds @simd for m = 1:idx2
+                    row2 = M + (m - idx2)
+                    a_out[m, i] -= a_pows_RLWE[row2, col]
+                end
+                @inbounds @simd for m= (idx2+1):M
+                    row2 = m - idx2
+                    a_out[m, i] -= a_pows_RLWE[row2, col]
+                end
+            end
+        end   
+    end
+end
+
 function l2_blocked_trace!(
     a_out::AbstractMatrix{Float64}, a_pows_RLWE::AbstractMatrix{Float64},
     i_block_size::Int = 8
