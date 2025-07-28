@@ -268,8 +268,8 @@ function simd_blocked_transpose!(B::AbstractMatrix{T}, A::AbstractMatrix{T}, blo
         for jj in 1:blocksize:n
             i_max = min(ii + blocksize - 1, m)
             j_max = min(jj + blocksize - 1, n)
-            LoopVectorization.@tturbo for i in ii:i_max, j in jj:j_max
-                    B[j, i] = A[i, j]
+            @inbounds for i in ii:i_max, j in jj:j_max
+                B[j, i] = A[i, j]
             end
         end
     end
