@@ -191,8 +191,13 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, Î
         end
     end=#
     #end
-    a_in = a_new
-    b_in = b_new
+    if start_trace < 2
+        a_in = real_to_torus(a_new)
+        b_in = real_to_torus(b_new)
+    else
+        a_in = a_new
+        b_in = b_new
+    end
     # Perform partial traces
     for j=2:Î²
         #@time "Partial Trace $(j)" begin
