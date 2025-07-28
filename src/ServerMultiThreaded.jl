@@ -45,9 +45,12 @@ function multi_threaded_partial_extract_trace!(a_rlwe_in_unpacked::AbstractArray
         start_idx = (chunk_idx-1) * N + 1
         end_idx = min(input_size, N*chunk_idx)
         # Perform Partial Trace Extract
-        if extract_level==1
-            @views multi_threaded_fast_partial_trace_0!(a_rlwe_in_unpacked[:, start_idx:end_idx], a_rlwe[:,:, chunk_idx])
-            @views multi_threaded_fast_partial_trace_0!(b_rlwe_in_unpacked[:, start_idx:end_idx], b_rlwe[:,:, chunk_idx])
+        if extract_level==0
+            @views l2_blocked_extract_0!(a_rlwe_in_unpacked[:, start_idx:end_idx], a_rlwe[:,:, chunk_idx])
+            @views l2_blocked_extract_0!(b_rlwe_in_unpacked[:, start_idx:end_idx], b_rlwe[:,:, chunk_idx])
+        elseif extract_level==1
+            @views l2_blocked_trace_0!(a_rlwe_in_unpacked[:, start_idx:end_idx], a_rlwe[:,:, chunk_idx])
+            @views l2_blocked_trace_0!(b_rlwe_in_unpacked[:, start_idx:end_idx], b_rlwe[:,:, chunk_idx])
         elseif extract_level==2
             @views l2_blocked_trace!(a_rlwe_in_unpacked[:, start_idx:end_idx], a_rlwe[:,:, chunk_idx])
             @views l2_blocked_trace!(b_rlwe_in_unpacked[:, start_idx:end_idx], b_rlwe[:,:, chunk_idx])
@@ -177,13 +180,11 @@ function multi_threaded_server_forward_conv_layer(
     # Compute number of packing batches
     number_of_packing_batches = output_size ÷ ((t^β * N)÷M ) + 1
 
-
-
     # If shuffle is not provided, use identity permutation
     if isnothing(shuffle)
         shuffle = Permutation(output_size)
     end
-
+    
     # Shuffle output
     a_rlwe_out_unpacked = shuffle_output(a_rlwe_out_unpacked, shuffle)
     b_rlwe_out_unpacked = shuffle_output(b_rlwe_out_unpacked, shuffle)
@@ -195,7 +196,15 @@ function multi_threaded_server_forward_conv_layer(
         β, array_FFT_ksk_s_prime_to_s, 
         g, D, l; 
         start_trace=extract_level)
-    end
+    end 
+    #= output_shape = (H_out, W_out, C_out, BM)
+    # Preallocate output
+    a_rlwe_out = Array{Float64}(undef, M, number_of_packing_batches)
+    b_rlwe_out = Array{Float64}(undef, M, number_of_packing_batches)
+
+    # Pack
+    pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_size, shuffle, extract_level=extract_level)=#
+
     println("t_pack : ", t_pack)
     # Return the output RLWEs
     return a_rlwe_out,b_rlwe_out, t_extract, t_conv, t_pack
