@@ -1,6 +1,8 @@
 import Pkg
 Pkg.add("Permutations")
+Pkg.add("LoopVectorization")
 
+using LoopVectorization
 using FFTW, Primes
 using CSV, DataFrames
 
@@ -26,6 +28,7 @@ include("./utils/examples_gpu_hybrid_inference.jl")
 
 ## Load model configuration
 include("../config/resnet20_cifar_layers.jl")
+include("../config/resnet34_layers.jl")
 
 ## Load model configuration
 model = resnet20_layers_cifar
@@ -50,7 +53,8 @@ global output_logger = DataFrame(
     fhe_output = Array{Int64}[],
     max_err = Int64[]
 )
-for iter in 1:2
+for extract_level in 2:2 # Level to extract output from
+for iter in 1:4
     # Pick random input data
     global nch_input_data_vec = vec(rand([i for i=-15:16], model[1].input_shape) / p)
 
@@ -70,7 +74,7 @@ for iter in 1:2
         gpu_kernel_weights, 
         gpu_projection_weights, 
         gpu_fc_weights,
-        1 # extract_level
+        extract_level # extract_level
     )
     end 
 
@@ -86,7 +90,8 @@ for iter in 1:2
         max_err = maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p)))
     ))
 
-    CSV.write("./logs/GPU_Cifar10_M$(M)_P$(log_p)_run_$iter.csv", log_data)
+    CSV.write("./logs/GPU_Cifar10_Tr$(extract_level)_M$(M)_P$(log_p)_run_$iter.csv", log_data)
     
-    CSV.write("./logs/GPU_Cifar10_M$(M)_P$(log_p)_output.csv", output_logger)
+    CSV.write("./logs/GPU_Cifar10_Tr$(extract_level)_M$(M)_P$(log_p)_output.csv", output_logger)
+end
 end
