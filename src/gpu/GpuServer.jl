@@ -1,8 +1,7 @@
 function gpu_partial_extract_trace!(
                         a_rlwe_in_unpacked::CuArray{Float64}, b_rlwe_in_unpacked::CuArray{Float64}, 
                         a_rlwe::CuArray{Float64}, b_rlwe::CuArray{Float64},# (M, t-1, N_chunks)
-                        input_size::Int,
-                        unshuffle::Permutation;
+                        input_size::Int;
                         extract_level=1::Int)  
     # Compute number of chunks
     num_chunks = size(a_rlwe)[3]
@@ -15,7 +14,10 @@ function gpu_partial_extract_trace!(
         fill!(b_out, 0.0)
 
         # Perform Partial Trace Extract
-        if extract_level==1
+        if extract_level== 0
+            @views gpu_l2_blocked_extract_0!(a_out, a_rlwe[:,:, chunk_idx])
+            @views gpu_l2_blocked_extract_0!(b_out, b_rlwe[:,:, chunk_idx])
+        elseif extract_level==1
             @views gpu_fast_partial_trace_0_fused!(a_out, a_rlwe[:,:, chunk_idx])
             @views gpu_fast_partial_trace_0_fused!(b_out, b_rlwe[:,:, chunk_idx])
         elseif extract_level==2
@@ -82,13 +84,20 @@ function gpu_pack_output!(
                     a_rlwe_out::CuArray{Float64}, b_rlwe_out::CuArray{Float64}, 
                     a_rlwe_out_unpacked::CuArray{Float64}, b_rlwe_out_unpacked::CuArray{Float64},
                     output_size::Int, # (H_out, W_out, C_out, B_outs)
-                    shuffle::Permutation;
+                    shuffle::CuArray{Int32};
                     extract_level=1::Int
                     )
     
     # Reshape A_RLWE_conv
     a_rlwe_out_unpacked = reshape(a_rlwe_out_unpacked, M, output_size)
     b_rlwe_out_unpacked = reshape(b_rlwe_out_unpacked, M, output_size)
+
+
+    # shuffle
+    #a_rlwe_in_unpacked_unshuffle = similar(a_rlwe_out_unpacked)
+    #b_rlwe_in_unpacked_unshuffle = similar(b_rlwe_out_unpacked)
+    #gpu_column_permute!(a_rlwe_in_unpacked_unshuffle, a_rlwe_out_unpacked, shuffle)
+    #gpu_column_permute!(b_rlwe_in_unpacked_unshuffle, b_rlwe_out_unpacked, shuffle)
 
     #######################
     ### Perform packing ###
@@ -115,6 +124,30 @@ function gpu_pack_output!(
     return nothing
 end
 
+
+function kernel_column_permute!(
+    A_out::CuDeviceMatrix{Float64},  # or Float64 or ComplexF32 etc.
+    A_in::CuDeviceMatrix{Float64},
+    perm::CuDeviceVector{Int32},
+    M::Int, B::Int
+)
+    col = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    row = (blockIdx().y - 1) * blockDim().y + threadIdx().y
+
+    if row <= M && col <= B
+        src_col = perm[col]
+        A_out[row, col] = A_in[row, src_col]
+    end
+    return
+end
+function gpu_column_permute!(
+    A_out::CuArray{T,2}, A_in::CuArray{T,2}, perm::CuArray{Int32}
+) where T
+    M, B = size(A_in)
+    threads = (32, 8)
+    blocks = (cld(B, threads[1]), cld(M, threads[2]))
+    @cuda threads=threads blocks=blocks kernel_column_permute!(A_out, A_in, perm, M, B)
+end
 function gpu_server_forward_conv_layer(
         a_rlwe_in::Array{Float64}, 
         b_rlwe_in::Array{Float64},
@@ -123,9 +156,9 @@ function gpu_server_forward_conv_layer(
         input_shape::Tuple{Int, Int, Int, Int},
         kernel::CuArray{Float64, 4},
         stride::Int,
-        padding::Int;
-        unshuffle=nothing::Union{Permutation, Nothing},
-        shuffle=nothing::Union{Permutation, Nothing},
+        padding::Int,
+        unshuffle::CuArray{Int32},
+        shuffle::CuArray{Int32};
         extract_level=1::Int, # 1 for fast_partial_trace_0, 2 for fast_partial_trace_1_comp_0
         tag=nothing::Union{String, Nothing}, # Tag of layer operation
         projection_kernel=nothing::Union{CuArray{Float64, 4}, Nothing}
@@ -137,30 +170,31 @@ function gpu_server_forward_conv_layer(
 
     input_size = prod(input_shape)
     
-    t_extract = @elapsed begin
+    t_extract = CUDA.@elapsed begin
     # Initialize Input RLWEs
     a_rlwe_in_unpacked = CuArray{Float64}(undef, M, input_size)
     b_rlwe_in_unpacked = CuArray{Float64}(undef, M, input_size)
 
-    # If unshuffle is not provided, use identity permutation
-    if isnothing(unshuffle)
-        unshuffle = Permutation(prod(input_shape))
-    end
-
     # Perform Partial Trace Extract
     gpu_partial_extract_trace!(a_rlwe_in_unpacked, b_rlwe_in_unpacked,
                            CuArray(a_rlwe_in), CuArray(b_rlwe_in), 
-                           input_size, 
-                           unshuffle, 
+                           input_size,  
                            extract_level=extract_level
                         )
-    end
+
+
+    # unshuffle
+    #a_rlwe_in_unpacked_unshuffle = similar(a_rlwe_in_unpacked)
+    #b_rlwe_in_unpacked_unshuffle = similar(b_rlwe_in_unpacked)
+    #gpu_column_permute!(a_rlwe_in_unpacked_unshuffle, a_rlwe_in_unpacked, unshuffle)
+    #gpu_column_permute!(b_rlwe_in_unpacked_unshuffle, b_rlwe_in_unpacked, unshuffle)
 
     a_rlwe_in_unpacked = reshape(a_rlwe_in_unpacked, (M* B, H,W,C_in))
     b_rlwe_in_unpacked = reshape(b_rlwe_in_unpacked, (M* B, H,W,C_in))
+    end
 
     # Save the unpacked RLWEs for residual connections
-    t_conv = @elapsed begin
+    t_conv =  CUDA.@elapsed begin
     if tag == "residual_in"
         a_rlwe_residual[] = a_rlwe_in_unpacked
         b_rlwe_residual[] = b_rlwe_in_unpacked
@@ -185,7 +219,7 @@ function gpu_server_forward_conv_layer(
     end
 
     ### Perform Packing
-    t_pack = @elapsed begin
+    t_pack =  CUDA.@elapsed begin
     BM, H_out, W_out, C_out = size(a_rlwe_out_unpacked)
 
     output_size =  BM * H_out * W_out * C_out ÷ M
@@ -199,25 +233,29 @@ function gpu_server_forward_conv_layer(
     a_rlwe_out = CuArray{Float64}(undef, M, batch_size, number_of_GPU_packing_batches)
     b_rlwe_out = CuArray{Float64}(undef, M, batch_size, number_of_GPU_packing_batches)
 
-    # If shuffle is not provided, use identity permutation
-    if isnothing(shuffle)
-        shuffle = Permutation(output_size)
-    end
-
     # Pack
     gpu_pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_size, shuffle, extract_level=extract_level)
+    #a_rlwe_out_unpacked = reshape(a_rlwe_out_unpacked, M, output_size)
+    #b_rlwe_out_unpacked = reshape(b_rlwe_out_unpacked, M, output_size)
+    
+    #a_rlwe_out, b_rlwe_out = gpu_layer_optimal_fast_packing(
+    #    a_rlwe_out_unpacked, 
+    #    b_rlwe_out_unpacked, 
+    #    β, array_FFT_ksk_s_d_to_s, 
+    #    g ,D, l; start_trace=extract_level)
     #a_rlwe_out = reshape(a_rlwe_out, M, batch_size*number_of_GPU_packing_batches)
     #b_rlwe_out = reshape(a_rlwe_out, M, batch_size*number_of_GPU_packing_batches)    
     end
+    println("t_extract : ", t_extract, "  t_conv : ", t_conv, "  t_pacl : ", t_pack)
     # Return the output RLWEs
-    return Array(a_rlwe_out), Array(b_rlwe_out), t_extract, t_conv, t_pack
+    return a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack
 end
 
 function gpu_server_forward_fc_layer(
         a_rlwe_in::Array{Float64}, 
         b_rlwe_in::Array{Float64},
-        weights::CuArray{Float64, 2}; # Weights for fully connected layer (Input_dim, Output_dim)
-        unshuffle=nothing::Union{Permutation, Nothing},
+        weights::CuArray{Float64, 2}, # Weights for fully connected layer (Input_dim, Output_dim)
+        unshuffle::CuArray{Int32}, shuffle::CuArray{Int32};
         extract_level=1::Int, # 1 for fast_partial_trace_0, 2 for fast_partial_trace_1_comp_0
     )
     t_extract = @elapsed begin
@@ -227,16 +265,16 @@ function gpu_server_forward_fc_layer(
     a_rlwe_in_unpacked = CuArray{Float64}(undef, M, input_size)
     b_rlwe_in_unpacked = CuArray{Float64}(undef, M, input_size)
 
-    # If unshuffle is not provided, use identity permutation
-    if isnothing(unshuffle)
-        unshuffle = Permutation(input_size)
-    end
-
     # Perform Partial Trace Extract
     gpu_partial_extract_trace!(a_rlwe_in_unpacked, b_rlwe_in_unpacked,
                            CuArray(a_rlwe_in), CuArray(b_rlwe_in), input_size, 
-                           unshuffle, extract_level=extract_level
+                           extract_level=extract_level
                         )
+    
+    #a_rlwe_in_unpacked_unshuffle = similar(a_rlwe_in_unpacked)
+    #b_rlwe_in_unpacked_unshuffle = similar(b_rlwe_in_unpacked)
+    #gpu_column_permute!(a_rlwe_in_unpacked_unshuffle, a_rlwe_in_unpacked, unshuffle)
+    #gpu_column_permute!(b_rlwe_in_unpacked_unshuffle, b_rlwe_in_unpacked, unshuffle)
     end
     t_conv = @elapsed begin
     # Perform matrix multiplication
@@ -249,15 +287,13 @@ function gpu_server_forward_fc_layer(
     
     # Preallocate output
     t_pack = @elapsed begin
+        # Preallocate output
     a_rlwe_out = CuArray{Float64}(undef, M, batch_size, number_of_GPU_packing_batches)
     b_rlwe_out = CuArray{Float64}(undef, M, batch_size, number_of_GPU_packing_batches)
 
-    shuffle = Permutation(output_size)
+
     # Pack
     gpu_pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_size, shuffle, extract_level=extract_level)
-    
-    #a_rlwe_out = reshape(a_rlwe_out, M, batch_size*number_of_GPU_packing_batches)[:,1:number_of_packing_batches]
-    #b_rlwe_out = reshape(a_rlwe_out, M, batch_size*number_of_GPU_packing_batches)
     end
-    return Array(a_rlwe_out), Array(b_rlwe_out), t_extract, t_conv, t_pack
+    return a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack
 end

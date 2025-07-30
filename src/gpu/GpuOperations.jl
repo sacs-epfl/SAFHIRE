@@ -59,3 +59,89 @@ function batch_rotate_poly_gpu!(Π_acc::CuMatrix{Float64},Π_batch::CuMatrix{Flo
 
     return
 end
+
+function fused_rotate_pack!(
+    a_new::CuDeviceMatrix{Float64}, b_new::CuDeviceMatrix{Float64},
+    a_0::CuDeviceMatrix{Float64}, b_0::CuDeviceMatrix{Float64},
+    M::Int, t::Int, β::Int, output_size::Int, new_output_size::Int, N::Int
+)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = blockDim().x * gridDim().x
+
+    pck_size = t^β * (N ÷ M) 
+    tβ1 = t^(β - 1)
+
+    while idx <= new_output_size
+        pck_idx = (idx - 1) ÷ tβ1 + 1
+        i = mod(idx - 1, tβ1) + 1
+        new_pck_idx = (pck_idx - 1) * tβ1
+        dest_col = new_pck_idx + i
+
+        @inbounds for m in 0:M-1
+            acc_a = 0.0
+            acc_b = 0.0
+
+            for j in 0:(t - 2)
+                linear_ind = i + j * tβ1 + (pck_idx - 1) * pck_size
+                if linear_ind <= output_size
+                    offset = mod1(j * div(M, t), M)
+                    src_idx = mod(m - offset, M)
+
+                    acc_a += a_0[src_idx + 1, linear_ind]
+                    acc_b += b_0[src_idx + 1, linear_ind]
+                end
+            end
+
+            a_new[m + 1, dest_col] = acc_a
+            b_new[m + 1, dest_col] = acc_b
+        end
+
+        idx += stride
+    end
+
+    return
+end
+
+function fused_add_rotate!(
+    a_new::CuDeviceMatrix{Float64}, b_new::CuDeviceMatrix{Float64},
+    a_in::CuDeviceMatrix{Float64}, b_in::CuDeviceMatrix{Float64},
+    M::Int, t::Int, β::Int, j::Int,
+    output_size::Int, nb_pck::Int
+)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = blockDim().x * gridDim().x
+
+    tβ_j = t^(β - j)
+    pck_size = t^(β - j + 1)
+    new_output_size = tβ_j * nb_pck
+
+    while idx <= new_output_size
+        pck_idx = (idx - 1) ÷ tβ_j + 1
+        i = mod(idx - 1, tβ_j) + 1
+        new_pck_idx = (pck_idx - 1) * tβ_j
+        dest_col = new_pck_idx + i
+
+        # Temporary registers to accumulate result per row
+        @inbounds for m in 0:M-1
+            acc_a = 0.0f0
+            acc_b = 0.0f0
+
+            for i_β in 0:(t - 1)
+                linear_ind = (pck_idx - 1) * pck_size + i_β * tβ_j + i
+                if linear_ind <= output_size
+                    rot_offset = mod1(i_β * div(M, t^j), M)
+                    src_idx = mod(m - rot_offset, M)
+
+                    acc_a += a_in[src_idx + 1, linear_ind]
+                    acc_b += b_in[src_idx + 1, linear_ind]
+                end
+            end
+
+            a_new[m + 1, dest_col] = acc_a
+            b_new[m + 1, dest_col] = acc_b
+        end
+
+        idx += stride
+    end
+    return
+end

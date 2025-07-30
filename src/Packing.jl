@@ -152,7 +152,7 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, Î
     b_buf = Array{ComplexF64}(undef, M, cpu_batch_size)
     a_aux = Array{ComplexF64}(undef, M, cpu_batch_size,l)
 
-    # If strat trace is 0 Apply Trace 0
+    # If start trace is 0 Apply Trace 0
     if start_trace == 0
         batch_number = ceil(Int, output_size / b_size)
         for batch_idx = 1:batch_number

@@ -7,9 +7,13 @@ for d in indices
     end
 end
 
+const CuFFT_automorphism_ksk = CuArray(FFT_automorphosim_ksk)
+
 const batch_size = 40
 plan_ref = Ref{CUDA.CUFFT.cufftHandle}()
+plan_ref_l = Ref{CUDA.CUFFT.cufftHandle}()
 CUDA.CUFFT.cufftPlan1d(plan_ref, M, CUDA.CUFFT.CUFFT_Z2Z, batch_size)
+CUDA.CUFFT.cufftPlan1d(plan_ref_l, M, CUDA.CUFFT.CUFFT_Z2Z, batch_size*l)
 
 function decompose_torus_batch_gpu_fast!(x_gpu::CuArray{ComplexF64},μ_batch::CuArray{ComplexF64}, D::Int64, l::Int64)
     M, batch_size = size(μ_batch)
@@ -61,6 +65,25 @@ function batch_multi_pol_sub_fused!(
 
     return nothing
 end
+function batch_multi_pol_sub_fused_bis!(
+    aux::CuArray{ComplexF64},
+    FFT_Q1::CuArray{ComplexF64},
+    FFT_Q2::CuArray{ComplexF64},
+    A_batch::CuArray{ComplexF64},
+    B_batch::CuArray{ComplexF64}
+)
+    # In-place FFT
+    Mf = float(M)
+    #CUDA.CUFFT.cufftExecZ2Z(plan_ref[], aux, aux, CUDA.CUFFT.CUFFT_FORWARD)
+
+    # Perform pointwise multiplications
+    FFT_Q1_reshape = reshape(FFT_Q1, :, 1)
+    FFT_Q2_reshape = reshape(FFT_Q2, :, 1)
+    @. A_batch -= (aux * FFT_Q1_reshape) / Mf
+    @. B_batch -= (aux * FFT_Q2_reshape) / Mf
+
+    return nothing
+end
 #
 """
     function gpu_rlwe_key_switch(A_batch_prime::CuArray{ComplexF64}, B_batch_prime::CuArray{ComplexF64},
@@ -95,10 +118,43 @@ function gpu_batch_rlwe_key_switch(A_batch_prime::CuArray{ComplexF64}, B_batch_p
     decompose_torus_batch_gpu_fast!(aux_a_gpu,A_batch_prime, D, l)
 
     for i=1:l
-        batch_multi_pol_sub_fused!(
+        @views batch_multi_pol_sub_fused!(
             aux_a_gpu[:, :, i],
             FFT_ksk_s_prime_to_s[i][1],
             FFT_ksk_s_prime_to_s[i][2],
+            A_batch,
+            B_batch
+        )
+    end
+
+    # Inverse FFT on both result buffers
+    CUDA.CUFFT.cufftExecZ2Z(plan_ref[], A_batch, A_batch, CUDA.CUFFT.CUFFT_INVERSE)
+    CUDA.CUFFT.cufftExecZ2Z(plan_ref[], B_batch, B_batch, CUDA.CUFFT.CUFFT_INVERSE)
+
+
+    # Add the second part of ciphertext (B)
+    B_batch .+= B_batch_prime
+
+    return nothing
+end
+
+function gpu_batch_rlwe_key_switch(A_batch_prime::CuArray{ComplexF64}, B_batch_prime::CuArray{ComplexF64},
+                               A_batch::CuArray{ComplexF64}, B_batch::CuArray{ComplexF64},
+                               FFT_ksk::CuArray{ComplexF64},
+                               D::Int64, l::Int64, aux_a_gpu::CuArray{ComplexF64})
+    #
+    # Key switch a RLWE cyphertext encrypter with key s_prime to key s
+    #
+
+    # === Torus Decomposition ==
+    decompose_torus_batch_gpu_fast!(aux_a_gpu,A_batch_prime, D, l)
+
+    CUDA.CUFFT.cufftExecZ2Z(plan_ref_l[], aux_a_gpu, aux_a_gpu, CUDA.CUFFT.CUFFT_FORWARD)
+    for i=1:l
+        @views batch_multi_pol_sub_fused_bis!(
+            aux_a_gpu[:, :, i],
+            FFT_ksk[:,i,1],
+            FFT_ksk[:,i,2],
             A_batch,
             B_batch
         )

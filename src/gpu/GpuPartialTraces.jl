@@ -63,6 +63,72 @@ function gpu_batch_partial_trace!(A_batch::CuArray{Float64}, B_batch::CuArray{Fl
 
     return
 end
+function gpu_batch_partial_trace!(A_batch::CuArray{Float64}, B_batch::CuArray{Float64}, j::Int64,
+                              array_FFT_ksk_s_d_to_s::CuArray{ComplexF64, 4},
+                              D::Int64, l::Int64, a_d::CuArray{ComplexF64}, b_d::CuArray{ComplexF64},
+                              a_sum::CuArray{ComplexF64}, b_sum::CuArray{ComplexF64},aux_a_gpu::CuArray{ComplexF64})# buffers)
+    #
+    #   Compute a RLWE encruption of Tr_j(μ) given a RLWE encryption
+    #   of μ and the Key Switching keys from s(X^d) to s(X)
+    #
+    CUDA.map!(x -> ComplexF64(x, 0.0), a_sum, A_batch)
+    CUDA.map!(x -> ComplexF64(x, 0.0), b_sum, B_batch)
+
+    for k=1:(t-1)
+        d = k*t^j + 1
+
+        A_batch_prime = power_gpu(A_batch, d)
+        B_batch_prime = power_gpu(B_batch, d)
+        
+        fill!(a_d, 0.0)
+        fill!(b_d, 0.0)
+        @views gpu_batch_rlwe_key_switch(A_batch_prime, B_batch_prime, a_d, b_d, array_FFT_ksk_s_d_to_s[:,:,:,d],D,l, aux_a_gpu)
+
+        a_sum .+= a_d
+        b_sum .+= b_d
+    end
+    #
+    CUDA.map!(real, A_batch, a_sum)
+    CUDA.map!(real, B_batch, b_sum)
+
+    return
+end
+function gpu_batch_partial_trace!(A_batch::CuArray{Float64}, B_batch::CuArray{Float64}, j::Int64,
+                              array_FFT_ksk_s_d_to_s::CuArray{ComplexF64, 4},
+                              D::Int64, l::Int64, a_d::CuArray{ComplexF64}, b_d::CuArray{ComplexF64},
+                              a_sum::CuArray{ComplexF64}, b_sum::CuArray{ComplexF64},
+                              a_out::CuArray{Float64},b_out::CuArray{Float64},
+                              aux_a_gpu::CuArray{ComplexF64})
+    #
+    #   Compute a RLWE encruption of Tr_j(μ) given a RLWE encryption
+    #   of μ and the Key Switching keys from s(X^d) to s(X)
+    #
+    CUDA.map!(x -> ComplexF64(x, 0.0), a_sum, A_batch)
+    CUDA.map!(x -> ComplexF64(x, 0.0), b_sum, B_batch)
+
+    a_tilted = A_batch
+    b_tilted = B_batch
+
+    for k=1:(t-1)
+        d = k*t^j + 1
+
+        A_batch_prime = power_gpu(a_tilted, d)
+        B_batch_prime = power_gpu(b_tilted, d)
+        
+        fill!(a_d, 0.0)
+        fill!(b_d, 0.0)
+        @views gpu_batch_rlwe_key_switch(A_batch_prime, B_batch_prime, a_d, b_d, array_FFT_ksk_s_d_to_s[:,:,:,d],D,l, aux_a_gpu)
+
+        a_sum .+= a_d
+        b_sum .+= b_d
+    end
+    #
+    CUDA.map!(real, a_out, a_sum)
+    CUDA.map!(real, b_out, b_sum)
+
+    return
+end
+
 function gpu_batch_partial_trace_0!(A_batch::CuArray{Float64}, B_batch::CuArray{Float64},
                               array_FFT_ksk_s_d_to_s::Array{Vector{Tuple{CuArray{ComplexF64}, CuArray{ComplexF64}}}},
                               g::Int64, D::Int64, l::Int64,
@@ -110,6 +176,30 @@ function gpu_batch_partial_trace_0!(A_batch::CuArray{Float64}, B_batch::CuArray{
     return
 end
 
+function l2_blocked_extract_0_kernel!(
+    a_out::CuDeviceMatrix{Float64}, a_pows_RLWE::CuDeviceMatrix{Float64}
+)
+    i = (blockIdx().x - 1) * blockDim().x + threadIdx().x  # column
+    m = (blockIdx().y - 1) * blockDim().y + threadIdx().y  # row
+
+    if i <= N && m <= M
+        pow = 1
+        col = 1
+
+        idx1 = mod(-(i - 1) * pow, M)
+        idx2 = mod(-pow * (N + mod(i - 1, M_over_t)), M)
+
+        # Shifted accesses (coalesced access across m)
+        row1 = ifelse(m <= idx1, M + (m - idx1), m - idx1)
+        row2 = ifelse(m <= idx2, M + (m - idx2), m - idx2)
+
+        # Apply in-place update
+        a_out[m, i] += a_pows_RLWE[row1, col]
+        a_out[m, i] -= a_pows_RLWE[row2, col]
+    end
+    return
+end
+
 function kernel_partial_trace0!(
     a_out, a_pows_RLWE, M::Int, N::Int, t::Int, M_over_t::Int, M_inv::Int
 )
@@ -148,6 +238,14 @@ function kernel_partial_trace_K2toK0!(
         a_out[m, i] = acc
     end
     return
+end
+
+function gpu_l2_blocked_extract_0!(
+    a_out::CuArray{Float64, 2}, a_pows_RLWE::CuArray{Float64, 2}
+)
+    threads = (32, 8)
+    blocks = (cld(N, threads[1]), cld(M, threads[2]))
+    @cuda threads=threads blocks=blocks l2_blocked_extract_0_kernel!(a_out, a_pows_RLWE)
 end
 
 function gpu_fast_partial_trace_0_fused!(
