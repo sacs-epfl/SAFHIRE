@@ -135,14 +135,13 @@ function batch_rlwe_key_switch_accumulate!(
     @inbounds Threads.@threads for idx=1:n_prime*b_size
         j = (idx - 1) % M + 1          # Fastest-varying dimension
         b = (idx - 1) ÷ M + 1
-        xtilde = a_in[j, b]
+        xtilde = real_to_torus(a_in[j, b])
         @inbounds for k in 1:l
             rounded = round(D * xtilde)
             aux_a[j, b, k] = ComplexF64(rounded, 0.0)
             xtilde = D * xtilde - rounded
         end
     end
-    #@time "fft" begin
         
     batch_fft_plans[b_size]*(aux_a)
     @inbounds for i=1:l
@@ -193,9 +192,6 @@ function batch_rlwe_key_switch_accumulate!(
     #
     b_size = size(a_sum, 2)
 
-    #fill!(a_rlwe, 0.0)
-    #fill!(b_rlwe, 0.0)
-
     # Vectorized and in-place computation for better performance
     @inbounds Threads.@threads for b = 1:b_size
         for j = 1:M
@@ -209,17 +205,9 @@ function batch_rlwe_key_switch_accumulate!(
     end
     
     batch_fft_plans[b_size]*(aux_a)
-    #=@inbounds for i=1:l
-        @views a_rlwe .-= aux_a[:,:,i] .* reshape(FFT_ksk_s_prime_to_s[:,i,1],:)
-        @views b_rlwe .-= aux_a[:,:,i] .* reshape(FFT_ksk_s_prime_to_s[:,i,2],:)
-    end =#
+
     update_rlwe_threaded!(a_rlwe, b_rlwe, aux_a, FFT_ksk_s_prime_to_s)
 
 
     b_sum .+= b_in
-    #batch_ifft_plans[b_size]*a_rlwe
-    #batch_ifft_plans[b_size]*b_rlwe
-
-    #a_sum .+= real.(a_rlwe)
-    #b_sum .+= real.(b_rlwe)
 end

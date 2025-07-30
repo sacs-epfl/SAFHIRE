@@ -58,7 +58,7 @@ function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_un
 end
 
 
-function partial_extract_trace!(a_rlwe_in_unpacked::Array{Float64}, b_rlwe_in_unpacked::Array{Float64}, 
+function partial_extract_trace!(a_rlwe_in_unpacked::AbstractArray{Float64}, b_rlwe_in_unpacked::AbstractArray{Float64}, 
                         a_rlwe::Array{Float64}, b_rlwe::Array{Float64},# (M, t-1, N_chunks)
                         input_dim::Int64,
                         unshuffle::Permutation;
@@ -245,16 +245,10 @@ function server_forward_conv_layer(
     end
 
     # Perform Partial Trace Extract
-    if Threads.nthreads()>1
-        multi_threaded_partial_extract_trace!(a_rlwe_in_unpacked, b_rlwe_in_unpacked,
-                           a_rlwe_in,b_rlwe_in, input_shape, 
-                           unshuffle, extract_level=extract_level)
-    else
     partial_extract_trace!(a_rlwe_in_unpacked, b_rlwe_in_unpacked,
                            a_rlwe_in,b_rlwe_in, input_shape, 
                            unshuffle, extract_level=extract_level
                         )
-    end
     end
 
     # Save the unpacked RLWEs for residual connections

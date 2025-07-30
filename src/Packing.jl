@@ -29,6 +29,7 @@ function optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, β::Int
         for j=0:(t-2)
             @views copyto!(a_tilded, a_0[:,i+j*t^(β-1)])
             @views copyto!(b_tilded, b_0[:,i+j*t^(β-1)])
+            # If strat trace is 0 we compute the first partial trace
             if start_trace == 0
                 partial_trace_0!(a_tilded, b_tilded,
                                 array_FFT_ksk_s_prime_to_s,
@@ -120,6 +121,22 @@ function transform_poly_cache_friendly!(
     end
 end
 
+
+"""
+Performs an optimized packing operation for a given layer using the provided input arrays and parameter.
+
+# Arguments
+- `a_0::Array{Float64}`: A two-dimensional array respresenting the first part of the mask of the RLWEs to pack.
+- `b_0::Matrix{Float64}`: A two-dimensional array representing the second part of the mask of the RLWEs to pack.
+- `β::Int64`: An integer parameter controlling the packing strategy or the number of elements to pack.
+- `array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}}`: An array containing precomputed FFT keys for the key switching operations.
+- `g::Int64`: A generator used in the packing operation.
+- `D::Int64`: Scaling factor in the key switching operation.
+- `l::Int64`: Depth in the key switching operation.
+
+# Returns
+- Packed RLWEs.
+"""
 function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, β::Int64,
                             array_FFT_ksk_s_prime_to_s::Array{Vector{Tuple{Array{ComplexF64}, Array{ComplexF64}}}},
                             g::Int64, D::Int64, l::Int64; start_trace=0::Int64)
@@ -135,7 +152,7 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, �
     b_buf = Array{ComplexF64}(undef, M, cpu_batch_size)
     a_aux = Array{ComplexF64}(undef, M, cpu_batch_size,l)
 
-    # Apply Trace 0
+    # If strat trace is 0 Apply Trace 0
     if start_trace == 0
         batch_number = ceil(Int, output_size / b_size)
         for batch_idx = 1:batch_number
@@ -152,45 +169,19 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, �
     end
 
     # Perform rotate add 
-    #@time "first rotate add" begin
+
     pck_size = (t^β * N ÷ M)
     nb_pck = ceil(Int, output_size / pck_size)
-    #println("Number of packing batches: ", nb_pck)
-    new_output_size = nb_pck * t^(β-1) #ceil(Int, output_size / (t-1))
+
+    new_output_size = nb_pck * t^(β-1)
 
     a_new = Array{Float64}(undef, M, new_output_size)
     b_new = Array{Float64}(undef, M, new_output_size)
     multi_threaded_fill_zeros!(a_new)
     multi_threaded_fill_zeros!(b_new)
-    #a_new = zeros(M, new_output_size)
-    #b_new = zeros(M, new_output_size)
 
     transform_poly_cache_friendly!(a_new, b_new, a_0, b_0, output_size, new_output_size, pck_size)
-    #=for idx = 1:new_output_size
-        pck_idx = (idx-1) ÷ t^(β-1) + 1
-        i = (idx-1) % t^(β-1) + 1
-        new_pck_idx = (pck_idx-1) * t^(β-1)
-        for j=0:(t-2)
-            linear_ind = i+j*t^(β-1) + (pck_idx-1) * pck_size
-            
-            if linear_ind <= output_size
-                idx1 = j*M÷(t)
-                @inbounds @simd for m = 1:idx1
-                    row1 = M + (m - idx1)
-                    a_new[m, new_pck_idx+i] += a_0[row1, linear_ind]
-                    b_new[m, new_pck_idx+i] += b_0[row1, linear_ind]
-                end
-                @inbounds @simd for m = idx1+1:M
-                    row1 = m - idx1
-                    a_new[m, new_pck_idx+i] += a_0[row1, linear_ind]
-                    b_new[m, new_pck_idx+i] += b_0[row1, linear_ind]
-                end
-                #@views rotate_poly!(a_new[:,new_pck_idx+i], a_0[:, linear_ind], j*M÷(t)+1)
-                #@views rotate_poly!(b_new[:,new_pck_idx+i], b_0[:, linear_ind], j*M÷(t)+1)
-            end
-        end
-    end=#
-    #end
+
     if start_trace < 2
         a_in = real_to_torus(a_new)
         b_in = real_to_torus(b_new)
@@ -198,9 +189,9 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, �
         a_in = a_new
         b_in = b_new
     end
+
     # Perform partial traces
     for j=2:β
-        #@time "Partial Trace $(j)" begin
         # Inplace Batch Partial Traces
         output_size = size(a_in, 2)
         if j > start_trace
@@ -208,7 +199,6 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, �
             for batch_idx = 1:batch_number
                 start_idx = (batch_idx-1)*b_size + 1
                 end_idx = min(output_size, batch_idx*b_size)
-                #@time "bath _$(batch_idx)" begin
                 if end_idx-start_idx+1 == b_size
                     @views batch_partial_trace!(
                         a_in[:,start_idx:end_idx], b_in[:,start_idx:end_idx], 
@@ -244,13 +234,12 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, �
         # Perform Add Rotate
         new_output_size = t^(β-j) * nb_pck
         pck_size =  t^(β-j+1)
-        #println("New output site : ", new_output_size)
+
+
         a_new = Array{Float64}(undef, M, new_output_size)
         b_new = Array{Float64}(undef, M, new_output_size)
         multi_threaded_fill_zeros!(a_new)
         multi_threaded_fill_zeros!(b_new)
-        #a_new = zeros(M, new_output_size)
-        #b_new = zeros(M, new_output_size)
 
         for pck_idx=1:nb_pck
             for i_β = 0:(t-1)
@@ -270,27 +259,12 @@ function layer_optimal_fast_packing(a_0::Array{Float64}, b_0::Matrix{Float64}, �
         b_in = real_to_torus(b_new)
     end
 
-    #=last_b_size = size(a_in,2)
-    a_sum_b = Array{Float64}(undef, M, last_b_size)
-    b_sum_b = Array{Float64}(undef, M, last_b_size)
-    a_d_b = Array{Float64}(undef, M, last_b_size)
-    b_d_b = Array{Float64}(undef, M, last_b_size)
-    for ind = β:(α-1)
-        @views batch_partial_trace!(
-            a_in, b_in,
-            ind ,array_FFT_ksk_s_prime_to_s, 
-            D ,l,
-            a_sum_b,b_sum_b,
-            a_d_b,b_d_b
-            ) 
-    end =#
     for ind = β:(α-1)
         output_size = size(a_in, 2)
         batch_number = ceil(Int, output_size / b_size)
         for batch_idx = 1:batch_number
             start_idx = (batch_idx-1)*b_size + 1
             end_idx = min(output_size, batch_idx*b_size)
-            #@time "bath _$(batch_idx)" begin
             if end_idx-start_idx+1 == b_size
                 @views batch_partial_trace!(
                     a_in[:,start_idx:end_idx], b_in[:,start_idx:end_idx], 

@@ -1,22 +1,3 @@
-function permute_2341(A::AbstractArray{T,4}) where T
-    out = Array{T}(undef, size(A,2), size(A,3), size(A,4), size(A,1))  # Allocate permuted output
-
-    @inbounds LoopVectorization.@tturbo for i1 in 1:size(A,1), i2 in 1:size(A,2), i3 in 1:size(A,3), i4 in 1:size(A,4)
-        out[i2, i3, i4, i1] = A[i1, i2, i3, i4]
-    end
-
-    return out
-end
-function permute_4123(A::AbstractArray{T,4}) where T
-    out = Array{T}(undef, size(A,4), size(A,1), size(A,2), size(A,3))  # Allocate output with permuted dims
-
-    @inbounds LoopVectorization.@tturbo for i1 in 1:size(A,1), i2 in 1:size(A,2), i3 in 1:size(A,3), i4 in 1:size(A,4)
-        out[i4, i1, i2, i3] = A[i1, i2, i3, i4]
-    end
-
-    return out
-end
-
 function multi_threaded_rlwe_conv(
                 a_rlwe_in_unpacked::AbstractArray{Float64}, 
                 b_rlwe_in_unpacked::AbstractArray{Float64}, 
@@ -172,8 +153,6 @@ function multi_threaded_server_forward_conv_layer(
         simd_blocked_transpose!(b_rlwe_out_unpacked,b_rlwe_out_unpacked_T)
     end
 
-    #println("t_conv : ", t_conv)
-
     ### Perform Packing
     t_pack = @elapsed begin
 
@@ -197,13 +176,6 @@ function multi_threaded_server_forward_conv_layer(
         g, D, l; 
         start_trace=extract_level)
     end 
-    #= output_shape = (H_out, W_out, C_out, BM)
-    # Preallocate output
-    a_rlwe_out = Array{Float64}(undef, M, number_of_packing_batches)
-    b_rlwe_out = Array{Float64}(undef, M, number_of_packing_batches)
-
-    # Pack
-    pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_size, shuffle, extract_level=extract_level)=#
 
     println("t_pack : ", t_pack)
     # Return the output RLWEs
