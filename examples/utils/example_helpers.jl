@@ -84,15 +84,12 @@ function clear_model_inference(
         
         # Project to Discrete Torus to get read of rounding encrypt_poly_star_to_rlwe_star
         clear_output_data = project_to_discrete_torus.(clear_output_data, p)
-        # Requantize the output data
-        #requantize_output!(clear_output_data, scaling)
 
         if !(layer.tag == "avg_pool" || layer.tag == "fc")
             # Apply ReLU activation function
-            clear_output_data = max.(clear_output_data, 0.0) # Apply ReLU activation function
+            clear_output_data = max.(clear_output_data, 0.0)
         end
         if layer.tag == "avg_pool"
-            #clear_output_data ./= layer.input_shape[1] * layer.input_shape[2]
             clear_output_data = project_to_discrete_torus.(clear_output_data, p)
         end
 

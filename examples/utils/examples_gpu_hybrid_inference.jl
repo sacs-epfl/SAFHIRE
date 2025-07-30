@@ -53,6 +53,11 @@ function gpu_run_hybrid_inference(
 
     global nch_input_data_vec = copy(input_data)
     for layer in model
+
+        if layer.id == 1
+            temp = Int32.(collect(RandomPermutation(prod(layer.input_shape)))) # Random permutation for first layer
+            global unshuffle = CuArray(temp)
+        end
         nch_input_shape = layer.input_shape # (H, W, C_in, B)
         stride = layer.stride
         padding = layer.padding
@@ -82,16 +87,20 @@ function gpu_run_hybrid_inference(
         end
 
         time_server = @elapsed begin
-        shuffle = RandomPermutation(output_size)
-        #Permutation(output_size)
+        shuffle = Int32.(collect(RandomPermutation(output_size)))
+        GPUshuffle = CuArray(shuffle)
+
         # Perform server forward layer operation
         @time begin
         if layer.tag == "fc"
+            temp = Int32.(collect(Permutation(output_size)))
+            GPUshuffle = CuArray(temp)
             # For fully connected layers
             a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = gpu_server_forward_fc_layer(
                 a_rlwe_in, b_rlwe_in,
-                fc_weights;
-                unshuffle=unshuffle,
+                fc_weights,
+                unshuffle,
+                GPUshuffle;
                 extract_level=extract_level
             )
         else
@@ -101,9 +110,9 @@ function gpu_run_hybrid_inference(
                 a_rlwe_residual, b_rlwe_residual,
                 nch_input_shape,
                 kernel_weights[layer.id], 
-                stride, padding;
-                unshuffle=unshuffle,
-                shuffle=shuffle,
+                stride, padding,
+                unshuffle,
+                GPUshuffle;
                 extract_level=extract_level,
                 tag=layer.tag,
                 projection_kernel=projection_weights[layer.id]
@@ -113,14 +122,18 @@ function gpu_run_hybrid_inference(
         end
 
         # Store inverse of shuffle for next layer
-        global unshuffle = (shuffle)
+        shuffleinv = Int32.(collect(inv(Permutation(shuffle))))
+        global unshuffle = CuArray(shuffleinv)
 
         # Receive data from server
         RLWE_download_size = (Base.summarysize(a_rlwe_out) + Base.summarysize(b_rlwe_out)) / (1024 * 1024)
 
         # If avg pool layer, adjust factor for scaling
         time_dcrpt = @elapsed begin
-
+        ## Put data on CPU
+        a_rlwe_out = Array(a_rlwe_out)
+        b_rlwe_out = Array(b_rlwe_out)
+        
         if layer.tag == "avg_pool"
             factor = 1#layer.input_shape[1] * layer.input_shape[2]
         else
@@ -128,15 +141,15 @@ function gpu_run_hybrid_inference(
         end
 
         # Decrypt output data
-        output_data_vec = decrypt_batch_output(
+        output_data_vec = decrypt_output(
             a_rlwe_out, b_rlwe_out, 
             output_size, 
             FFT_Key_RLWE, β;
             factor=factor
         )
         end
+
         # Process output data (e.g., reshape, apply activation, etc.)
-        #requantize_output!(output_data_vec, scaling)
 
         # Apply ReLU activation function
         time_relu = @elapsed begin

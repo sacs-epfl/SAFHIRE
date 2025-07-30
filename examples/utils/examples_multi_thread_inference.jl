@@ -66,7 +66,7 @@ function run_multithreaded_hybrid_inference(
 
         time_server = @elapsed begin
         shuffle = RandomPermutation(output_size)
-        #Permutation(output_size)
+
         # Perform server forward layer operation
         @time begin
         if layer.tag == "fc"
@@ -102,31 +102,23 @@ function run_multithreaded_hybrid_inference(
         # Receive data from server
         RLWE_download_size = (Base.summarysize(a_rlwe_out) + Base.summarysize(b_rlwe_out)) / (1024 * 1024)
 
-        # If avg pool layer, adjust factor for scaling
         time_dcrpt = @elapsed begin
-
-        if layer.tag == "avg_pool"
-            factor = 1#layer.input_shape[1] * layer.input_shape[2]
-        else
-            factor = 1
-        end
 
         # Decrypt output data
         output_data_vec = decrypt_output(
             a_rlwe_out, b_rlwe_out, 
             output_size, 
-            FFT_Key_RLWE, β;
-            factor=factor
+            FFT_Key_RLWE, β
         )
         end
+
         # Process output data (e.g., reshape, apply activation, etc.)
-        #requantize_output!(output_data_vec, scaling)
 
         # Apply ReLU activation function
         time_relu = @elapsed begin
         if !(layer.tag == "avg_pool" || layer.tag == "fc")
             # Apply ReLU activation function
-            relu!(output_data_vec) # Apply ReLU activation function
+            relu!(output_data_vec)
         end
         end
 
