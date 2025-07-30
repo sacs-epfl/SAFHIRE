@@ -22,8 +22,13 @@ include("./utils/examples_multi_thread_inference.jl")
 
 # Configure environment
 BLAS.set_num_threads(1)
+
+
 ## Load model configuration
 model = resnet20_layers_cifar
+
+## Choose extract level
+global extract_level = 2
 
 ## Define Constants
 weight_space = [i/1.0 for i=-3:4]
@@ -39,7 +44,8 @@ global output_logger = DataFrame(
     max_err = Int64[]
 )
 global nb_threads = Threads.nthreads()
-for iter in 1:6
+
+for iter in 1:2
     # Pick random input data
     global nch_input_data_vec = vec(rand([i for i=-15:16], model[1].input_shape) / p)
 
@@ -50,7 +56,6 @@ for iter in 1:6
         projection_weights, 
         fc_weights
     )
-    #println("Clear output data vector: ", round.(Int64,vec(clear_output_data)[1:10] *p))
 
     inference_time = @elapsed begin
     fhe_output_data, log_data = run_multithreaded_hybrid_inference(
@@ -59,12 +64,10 @@ for iter in 1:6
         kernel_weights, 
         projection_weights, 
         fc_weights,
-        2 # extract_level
+        extract_level # extract_level
     )
     end 
 
-    #println("Clear output data vector: ", round.(Int64,vec(clear_output_data)[1:10] *p))
-    #println("Final output data vector: ", round.(Int64,p*[fhe_output_data[i] for i=1:10]) )
     println("Max error: ", maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p))))
     println("Inference time: ", inference_time, " seconds")
 
@@ -75,7 +78,7 @@ for iter in 1:6
         max_err = maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p)))
     ))
 
-    CSV.write("./logs/Thread$(nb_threads)_Tr_2_Cifar10_P$(log_p)_run_$iter.csv", log_data)
+    CSV.write("./logs/Thread$(nb_threads)_Tr_$(extract_level)_Cifar10_P$(log_p)_run_$iter.csv", log_data)
     
-    CSV.write("./logs/Thread$(nb_threads)_Tr_2_Cifar10_P$(log_p)_output.csv", output_logger)
+    CSV.write("./logs/Thread$(nb_threads)_Tr_$(extract_level)_Cifar10_P$(log_p)_output.csv", output_logger)
 end

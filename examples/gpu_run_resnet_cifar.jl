@@ -33,6 +33,9 @@ include("../config/resnet34_layers.jl")
 ## Load model configuration
 model = resnet20_layers_cifar
 
+## Choose extract level
+global extract_level = 2 # Level to extract output from
+
 ## Define Constants
 weight_space = [i/1.0 for i=-3:4]
 log_p = round(log2(p)) # Precision
@@ -53,7 +56,7 @@ global output_logger = DataFrame(
     fhe_output = Array{Int64}[],
     max_err = Int64[]
 )
-for extract_level in 2:2 # Level to extract output from
+
 for iter in 1:4
     # Pick random input data
     global nch_input_data_vec = vec(rand([i for i=-15:16], model[1].input_shape) / p)
@@ -65,7 +68,6 @@ for iter in 1:4
         projection_weights, 
         fc_weights
     )
-    #println("Clear output data vector: ", round.(Int64,vec(clear_output_data)[1:10] *p))
 
     inference_time = @elapsed begin
     fhe_output_data, log_data = gpu_run_hybrid_inference(
@@ -93,5 +95,4 @@ for iter in 1:4
     CSV.write("./logs/GPU_Cifar10_Tr$(extract_level)_M$(M)_P$(log_p)_run_$iter.csv", log_data)
     
     CSV.write("./logs/GPU_Cifar10_Tr$(extract_level)_M$(M)_P$(log_p)_output.csv", output_logger)
-end
 end

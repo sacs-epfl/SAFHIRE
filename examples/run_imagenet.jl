@@ -18,6 +18,7 @@ include("./utils/examples_hybrid_inference.jl")
 
 ## Load model configuration
 model = resnet34_layers
+global extract_level = 2 # Level of partial trace extraction
 
 ## Define Constants
 weight_space = [i/1.0 for i=-3:4]
@@ -54,12 +55,10 @@ for iter in 1:1
         kernel_weights, 
         projection_weights, 
         fc_weights,
-        0 # extract_level
+        extract_level # extract_level
     )
     end 
 
-    #println("Clear output data vector: ", round.(Int64,vec(clear_output_data)[1:10] *p))
-    #println("Final output data vector: ", round.(Int64,p*[fhe_output_data[i] for i=1:10]) )
     println("Max error: ", maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p))))
     println("Inference time: ", inference_time, " seconds")
 
@@ -70,7 +69,7 @@ for iter in 1:1
         max_err = maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p)))
     ))
 
-    CSV.write("./logs/Tr_0_ResNet34_M$(M)_P$(log_p)_run_$iter.csv", log_data)
-    
-    CSV.write("./logs/Tr_0_ResNet34_M$(M)_P$(log_p)_output.csv", output_logger)
+    CSV.write("./logs/Tr_$(extract_level)_ResNet34_M$(M)_P$(log_p)_run_$iter.csv", log_data)
+
+    CSV.write("./logs/Tr_$(extract_level)_ResNet34_M$(M)_P$(log_p)_output.csv", output_logger)
 end
