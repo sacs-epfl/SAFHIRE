@@ -68,7 +68,9 @@ for iter in 1:2
     )
     end 
 
-    println("Max error: ", maximum(abs.(round.(Int64,p*fhe_output_data) - round.(Int64,vec(clear_output_data) *p))))
+    max_error = maximum(abs.(round.(Int64, p*fhe_output_data) .- round.(Int64, vec(clear_output_data) * p)))
+    println("Max error: ", max_error)
+    @assert max_error == 0 "Max error is not zero! Got $max_error"
     println("Inference time: ", inference_time, " seconds")
 
     # Push ouput to DataFrame
