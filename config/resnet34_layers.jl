@@ -108,19 +108,22 @@ resnet34_layers_cifar = [
     (id=24, input_shape=(8, 8,  256, b), kernel_shape=(3, 3, 256, 256), stride=1, padding=1, tag="residual_in"),
     (id=25, input_shape=(8, 8,  256, b), kernel_shape=(3, 3, 256, 256), stride=1, padding=1, tag="residual_add"),
 
-    # Stage 4: 3 BasicBlocks, 512ch; first block stride=2 (down to 4x4)
-    (id=26, input_shape=(8, 8,  256, b), kernel_shape=(3, 3, 256, 512), stride=2, padding=1, tag="residual_projection"),
-    (id=27, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_add"),
+    (id=26, input_shape=(8, 8, 256, b), kernel_shape=(3, 3, 256, 256), stride=1, padding=1, tag="residual_in"),
+    (id=27, input_shape=(8, 8, 256, b), kernel_shape=(3, 3, 256, 256), stride=1, padding=1, tag="residual_add"),
 
-    (id=28, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_in"),
+    # Stage 4: 3 BasicBlocks, 512ch; first block stride=2 (down to 4x4)
+    (id=28, input_shape=(8, 8,  256, b), kernel_shape=(3, 3, 256, 512), stride=2, padding=1, tag="residual_projection"),
     (id=29, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_add"),
 
     (id=30, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_in"),
     (id=31, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_add"),
 
+    (id=32, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_in"),
+    (id=33, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_add"),
+
     # Global average pooling (parameter-free)
-    (id=32, input_shape=(4, 4, 512, b), kernel_shape=(0, 0, 0, 0), stride=1, padding=0, tag="avg_pool"),
+    (id=34, input_shape=(4, 4, 512, b), kernel_shape=(0, 0, 0, 0), stride=1, padding=0, tag="avg_pool"),
 
     # FC 512 -> 10
-    (id=33, input_shape=(512,), output_shape=(10,), stride=1, padding=0, tag="fc")
+    (id=35, input_shape=(512,), output_shape=(10,), stride=1, padding=0, tag="fc")
 ]
