@@ -60,7 +60,7 @@ resnet34_layers = [
     (id=34, input_shape=(7, 7, 512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_add"),
 
         # Average Pooling performed as a sum on W and H
-    (id=35, input_shape=(7, 7, 512, b), kernel_shape=(0, 0, 0, 0), stride=1, padding=0, tag="avg_pool"),
+    (id=35, input_shape=(7, 7, 512, b), kernel_shape=(7, 7, 512, 512), stride=1, padding=0, tag="avg_pool"),
 
     (id=36, input_shape=(512,),output_shape=(1000,), stride=1, padding=1, tag="fc")
 ]
@@ -122,7 +122,7 @@ resnet34_layers_cifar = [
     (id=33, input_shape=(4, 4,  512, b), kernel_shape=(3, 3, 512, 512), stride=1, padding=1, tag="residual_add"),
 
     # Global average pooling (parameter-free)
-    (id=34, input_shape=(4, 4, 512, b), kernel_shape=(0, 0, 0, 0), stride=1, padding=0, tag="avg_pool"),
+    (id=34, input_shape=(4, 4, 512, b), kernel_shape=(4, 4, 512, 512), stride=1, padding=0, tag="avg_pool"),
 
     # FC 512 -> 10
     (id=35, input_shape=(512,), output_shape=(10,), stride=1, padding=0, tag="fc")
