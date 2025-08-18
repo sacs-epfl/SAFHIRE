@@ -26,7 +26,7 @@ BLAS.set_num_threads(1)
 
 
 ## Load model configuration
-model = resnet20_layers_cifar
+model = resnet34_layers_cifar
 
 ## Choose extract level
 global extract_level = 2
