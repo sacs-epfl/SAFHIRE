@@ -15,6 +15,7 @@ include("../src/Server.jl")
 include("../src/ServerMultiThreaded.jl")
 include("../src/Client.jl")
 
+include("../config/resnet18_tiny_layers.jl")
 include("../config/resnet20_cifar_layers.jl")
 include("../config/resnet34_layers.jl")
 include("./utils/example_helpers.jl")
@@ -25,7 +26,7 @@ BLAS.set_num_threads(1)
 
 
 ## Load model configuration
-model = resnet20_layers_cifar
+model = resnet18_layers_tiny
 
 ## Choose extract level
 global extract_level = 2

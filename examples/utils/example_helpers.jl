@@ -8,6 +8,27 @@ function get_max_layer_size(model)
     return max_input_size
 end
 
+function count_parameters(kernel_weights, projection_weights, fc_weights)
+    total = 0
+    
+    # Count conv kernel weights
+    for w in kernel_weights
+        total += length(w)
+    end
+    
+    # Count projection weights (skip `nothing`)
+    for pw in projection_weights
+        if pw !== nothing
+            total += length(pw)
+        end
+    end
+    
+    # Count fc layer
+    total += length(fc_weights)
+    
+    return total
+end
+
 function initialize_model_inference!(
     model,
     weight_space
@@ -15,6 +36,7 @@ function initialize_model_inference!(
     kernel_weights = Array{Float64, 4}[]
     projection_weights = Union{Array{Float64,4}, Nothing}[]
     fc_weights = Array{Float64}
+
     # Initialize kernel weights for all layers
     for layer in model
         if !(layer.tag == "fc")
@@ -36,6 +58,8 @@ function initialize_model_inference!(
             fc_weights = rand(weight_space, input_dim, output_dim)
         end
     end
+
+    println("Total parameters in model: ", count_parameters(kernel_weights, projection_weights, fc_weights))
 
     return kernel_weights, projection_weights, fc_weights
 end
