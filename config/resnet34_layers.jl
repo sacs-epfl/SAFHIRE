@@ -67,7 +67,7 @@ resnet34_layers = [
 
 resnet34_layers_cifar = [
     # Initial conv layer
-    (id=1, input_shape=(10, 10, 3, b), kernel_shape=(7, 7, 3, 64), stride=2, padding=3, tag=nothing),
+    (id=1, input_shape=(32, 32, 3, b), kernel_shape=(7, 7, 3, 64), stride=2, padding=3, tag=nothing),
 
     # MaxPool layer - replaced by average pooling
     (id=2, input_shape=(112, 112, 64, b), kernel_shape=(3, 3, 64, 64), stride=2, padding=1, tag=nothing),
