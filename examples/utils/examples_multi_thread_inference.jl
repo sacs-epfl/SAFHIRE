@@ -4,6 +4,7 @@ function run_multithreaded_hybrid_inference(
     kernel_weights, 
     projection_weights, 
     fc_weights, 
+    biases,
     extract_level
     )
 
@@ -73,7 +74,8 @@ function run_multithreaded_hybrid_inference(
             # For fully connected layers
             a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack = server_forward_fc_layer(
                 a_rlwe_in, b_rlwe_in,
-                fc_weights;
+                fc_weights,
+                biases[layer.id];
                 unshuffle=unshuffle,
                 extract_level=extract_level
             )
@@ -85,7 +87,8 @@ function run_multithreaded_hybrid_inference(
                 a_rlwe_residual, b_rlwe_residual,
                 nch_input_shape,
                 kernel_weights[layer.id], 
-                stride, padding;
+                stride, padding,
+                biases[layer.id];
                 unshuffle=unshuffle,
                 shuffle=shuffle,
                 extract_level=extract_level,
