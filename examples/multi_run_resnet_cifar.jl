@@ -30,6 +30,9 @@ model = resnet20_layers_cifar
 ## Choose extract level
 global extract_level = 2
 
+## Use Bias
+UseBiases = false
+
 ## Define Constants
 weight_space = [i/1.0 for i=-3:4]
 log_p = round(log2(p)) # Precision
