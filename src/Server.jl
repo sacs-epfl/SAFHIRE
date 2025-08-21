@@ -302,12 +302,29 @@ function server_forward_conv_layer(
     return a_rlwe_out,b_rlwe_out, t_extract, t_conv, t_pack
 end
 
+function add_bias!(b_rlwe_out::Array{Float64}, bias::Array{Float64}, shuffle::Permutation, output_size::Int)
+    # Compute number of packing batches
+    number_of_packing_batches = size(b_rlwe_out)[2]
+
+    for batch_id = 1:number_of_packing_batches
+        for j=1:((t^β * N)÷M)
+            idx = (batch_id - 1) *(t^β * N)÷M + j
+            if idx > output_size
+                break
+            end
+            b_rlwe_out[(j-1)*M÷(t^β)+1,batch_id] += bias[shuffle(idx)] * M
+        end
+    end
+    return
+end
+
 function server_forward_fc_layer(
         a_rlwe_in::Array{Float64}, 
         b_rlwe_in::Array{Float64},
-        weights::Array{Float64, 2}; # Weights for fully connected layer (Input_dim, Output_dim)
+        weights::Array{Float64, 2},
+        bias::Array{Float64}; # Weights for fully connected layer (Input_dim, Output_dim)
         unshuffle=nothing::Union{Permutation, Nothing},
-        extract_level=1::Int, # 1 for fast_partial_trace_0, 2 for fast_partial_trace_1_comp_0
+        extract_level=1::Int # 1 for fast_partial_trace_0, 2 for fast_partial_trace_1_comp_0
     )
     t_extract = @elapsed begin
     # Implementation similar to server_forward_conv_layer but adapted for fully connected layers
@@ -344,5 +361,9 @@ function server_forward_fc_layer(
     # Pack
     pack_output!(a_rlwe_out, b_rlwe_out, a_rlwe_out_unpacked, b_rlwe_out_unpacked, output_size, shuffle, extract_level=extract_level)
     end
+
+    # Add bias to output
+    add_bias!(b_rlwe_out, bias, shuffle, output_size)
+
     return a_rlwe_out, b_rlwe_out, t_extract, t_conv, t_pack
 end

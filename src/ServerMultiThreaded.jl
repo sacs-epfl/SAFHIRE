@@ -73,7 +73,8 @@ function multi_threaded_server_forward_conv_layer(
         input_shape::Tuple{Int, Int, Int, Int},
         kernel::Array{Float64, 4},
         stride::Int,
-        padding::Int;
+        padding::Int,
+        bias::Array{Float64};
         unshuffle=nothing::Union{Permutation, Nothing},
         shuffle=nothing::Union{Permutation, Nothing},
         extract_level=1::Int, # 1 for fast_partial_trace_0, 2 for fast_partial_trace_1_comp_0
@@ -178,6 +179,12 @@ function multi_threaded_server_forward_conv_layer(
     end 
 
     println("t_pack : ", t_pack)
+
+    # Add biases after packing
+    if tag != "avg_pool"
+        add_bias!(b_rlwe_out, vec(bias), shuffle, output_size)
+    end
+
     # Return the output RLWEs
     return a_rlwe_out,b_rlwe_out, t_extract, t_conv, t_pack
 end
