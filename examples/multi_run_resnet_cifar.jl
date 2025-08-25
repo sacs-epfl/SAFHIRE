@@ -16,6 +16,7 @@ include("../src/ServerMultiThreaded.jl")
 include("../src/Client.jl")
 
 include("../config/resnet20_cifar_layers.jl")
+include("../config/resnet18_tiny_layers.jl")
 include("../config/resnet34_layers.jl")
 include("./utils/example_helpers.jl")
 include("./utils/examples_multi_thread_inference.jl")
@@ -30,12 +31,13 @@ model = resnet20_layers_cifar
 ## Choose extract level
 global extract_level = 2
 
+
 ## Define Constants
 weight_space = [i/1.0 for i=-3:4]
 log_p = round(log2(p)) # Precision
 
 # Initialize kernel weights for all layers
-kernel_weights, projection_weights, fc_weights = initialize_model_inference!(model, weight_space)
+kernel_weights, projection_weights, fc_weights, biases = initialize_model_inference!(model, weight_space)
 
 # Initialize Logger for outputs
 global output_logger = DataFrame(
@@ -54,7 +56,8 @@ for iter in 1:2
         model, 
         kernel_weights, 
         projection_weights, 
-        fc_weights
+        fc_weights,
+        biases
     )
 
     inference_time = @elapsed begin
@@ -64,6 +67,7 @@ for iter in 1:2
         kernel_weights, 
         projection_weights, 
         fc_weights,
+        biases,
         extract_level # extract_level
     )
     end 

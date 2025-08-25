@@ -15,11 +15,17 @@ function initialize_model_inference!(
     kernel_weights = Array{Float64, 4}[]
     projection_weights = Union{Array{Float64,4}, Nothing}[]
     fc_weights = Array{Float64}
+    biases = Array{Float64}[]
     # Initialize kernel weights for all layers
     for layer in model
         if !(layer.tag == "fc")
             # For convolutional layers, initialize kernel weights
             push!(kernel_weights, rand(weight_space, layer.kernel_shape))
+
+            # Get output shape from next layer
+            output_shape = model[layer.id + 1].input_shape
+            push!(biases, rand(weight_space, output_shape) ./ p)
+
             if layer.tag == "residual_projection"
                 W,H,C_in,C_out = layer.kernel_shape
 
@@ -33,11 +39,12 @@ function initialize_model_inference!(
             input_dim = prod(layer.input_shape)
             output_dim = prod(layer.output_shape)
             #
+            push!(biases, rand(weight_space, (1,output_dim)) ./ p)
             fc_weights = rand(weight_space, input_dim, output_dim)
         end
     end
 
-    return kernel_weights, projection_weights, fc_weights
+    return kernel_weights, projection_weights, fc_weights, biases
 end
 
 function clear_model_inference(
@@ -45,7 +52,8 @@ function clear_model_inference(
     resnet20_layers_cifar, 
     kernel_weights, 
     projection_weights, 
-    fc_weights
+    fc_weights,
+    biases
 )
     clear_input_data_vec = copy(nch_input_data_vec)
     clear_input_data = reshape(clear_input_data_vec, resnet20_layers_cifar[1].input_shape)
@@ -64,13 +72,17 @@ function clear_model_inference(
             input_size = prod(layer.input_shape)
             clear_input_data = reshape(clear_input_data, (1, input_size))
             clear_output_data = clear_input_data * fc_weights
+
+            # Add biases                
+            clear_output_data += biases[layer.id]
+
         elseif layer.tag == "avg_pool"
             # For average pooling layers
             clear_output_data = sum(clear_input_data, dims=(1, 2)) # Sum over H and W dimensions
         else
             # For convolutional layers
             clear_output_data  = conv(clear_input_data, kernel_weights[layer.id]; stride=(stride, stride), pad=(padding, padding))
-        
+
             if layer.tag == "residual_in"
                 clear_residual[] = clear_input_data
             elseif layer.tag == "residual_projection"
@@ -79,7 +91,10 @@ function clear_model_inference(
             elseif layer.tag == "residual_add"
                 # Add residual connection if needed
                 clear_output_data .+= clear_residual[]
-            end
+            end            
+            
+            # Add biases
+            clear_output_data .+= biases[layer.id]
         end
         
         # Project to Discrete Torus to get read of rounding encrypt_poly_star_to_rlwe_star
