@@ -1,28 +1,30 @@
 ##################
 ### Parameters ###
 ##################
+# Configurable parameters: set _param_* variables before including this file.
+# If not set, defaults match the 16-bit precision, γ∈[1,2] configuration.
 #
-const n=1331              # Number of components in the secret LWE-key
 const S=[-1;1]            # The subset of Z in which the components of the key are picked
 const σ_LWE=2^(-26)       # Standard deviation of the Gaussian noise in LWE-encryption
-const σ_RLWE=2^(-51)      # Standard deviation of the Gaussian noise in RLWE-encryption
-const p= 2^16             # Number of elements in the discrete torus T_p size of the accumlator
+const σ_RLWE= @isdefined(_param_σ_RLWE) ? _param_σ_RLWE : 2^(-51)
+const p= @isdefined(_param_p) ? _param_p : 2^16
 #
 #
 ##############################
-### Cyclotomic index M=t^α ###         
+### Cyclotomic index M=t^α ###
 ##############################
 #
-const α=5                 # A strictly positive integer 
-const t=5                 # A prime number 
-const g=2                 # Generator of (Z/MZ,x)
+const α= @isdefined(_param_α) ? _param_α : 5
+const t= @isdefined(_param_t) ? _param_t : 5
+const g= @isdefined(_param_g) ? _param_g : 2
 const M=t^α               # Cyclotomic index
 const N=t^(α-1)*(t-1)     # The Euler function of M
+const n=N                 # LWE-key dimension (set to Euler totient)
 const M_over_t=t^(α-1)    # Used for change of bases
 const M_inv = mod(gcdx(M, p)[2], p)             # The invert of M mod p
-const D = 310
-const l = 4
-const β=4                 # Packing level
+const D = @isdefined(_param_D) ? _param_D : 310
+const l = @isdefined(_param_l) ? _param_l : 4
+const β=α-1               # Packing level (derived)
 
 const one_t=ones(t)             # Vector of size t with unit components
 const F=1.0/M                   # F=1/M used in the change of bases
